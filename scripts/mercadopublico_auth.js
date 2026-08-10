@@ -61,20 +61,28 @@ async function runMercadoPublicoAuth() {
   }
 
   if (!isLocalBrowser) {
-    execPath = await chromium.executablePath();
+    const chromInstance = chromium?.default || chromium;
+    const execPathFn = typeof chromInstance?.executablePath === 'function' 
+      ? chromInstance.executablePath 
+      : (typeof chromium?.default?.executablePath === 'function' ? chromium.default.executablePath : null);
+    
+    if (execPathFn) {
+      execPath = await execPathFn();
+    }
     console.log(`⚡ Usando ejecutable liviano de @sparticuz/chromium: ${execPath}`);
   }
 
+  const activeChrom = chromium?.default || chromium;
   const launchOptions = isLocalBrowser ? {
     executablePath: execPath,
     headless: (process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production' || !!process.env.RENDER) ? 'new' : false,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     defaultViewport: { width: 1280, height: 800 }
   } : {
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
+    args: activeChrom.args || chromium?.default?.args,
+    defaultViewport: activeChrom.defaultViewport || chromium?.default?.defaultViewport,
     executablePath: execPath,
-    headless: chromium.headless,
+    headless: activeChrom.headless !== undefined ? activeChrom.headless : chromium?.default?.headless,
   };
 
   console.log('🌐 Configurando motor Puppeteer / Sparticuz Chromium...');
