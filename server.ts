@@ -445,7 +445,7 @@ app.get("/api/mp/session", (_req, res) => {
   }
 });
 
-// Endpoint to trigger Playwright automation for Mercado Público / ClaveÚnica authentication & scraping
+// Endpoint to trigger Puppeteer automation for Mercado Público / ClaveÚnica authentication & scraping
 app.post("/api/mp/connect", async (req, res) => {
   const { rut, password } = req.body || {};
 
@@ -453,22 +453,50 @@ app.post("/api/mp/connect", async (req, res) => {
   if (password) process.env.CU_PASSWORD = password;
 
   console.log("\n========================================================");
-  console.log(" 🤖 SOLICITUD DE AUTENTICACIÓN MANUALLY ASSISTED MERCADO PÚBLICO");
+  console.log(" 🤖 SOLICITUD DE AUTENTICACIÓN MERCADO PÚBLICO / CLAVEÚNICA");
   if (rut) console.log(` 👤 RUT: ${rut}`);
-  console.log(" 🌐 Lanzando navegador interactivo Playwright...");
+  console.log(" 🌐 Lanzando navegador Puppeteer...");
   console.log("========================================================\n");
 
   try {
-    // Dynamic import to run Playwright script
     const { runMercadoPublicoAuth } = await import("./scripts/mercadopublico_auth.js");
-    const result = await runMercadoPublicoAuth();
+    const result = await runMercadoPublicoAuth({ rut, password });
     return res.json(result);
   } catch (err: any) {
-    console.error("Error ejecutando bot de Playwright:", err);
+    console.error("Error ejecutando bot de Puppeteer:", err);
     return res.status(500).json({
       success: false,
       status: "Fallo de Sesión",
-      error: err.message || "Error al conectar con Mercado Público vía Playwright."
+      error: err.message || "Error al conectar con Mercado Público vía Puppeteer."
+    });
+  }
+});
+
+// Endpoint to receive and submit the 6-digit 2FA code to active Puppeteer browser session
+app.post("/api/submit-2fa", async (req, res) => {
+  const { sessionId, code } = req.body || {};
+
+  if (!code || typeof code !== "string" || code.trim().length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Por favor ingrese el código 2FA de 6 dígitos."
+    });
+  }
+
+  console.log("\n========================================================");
+  console.log(` 🔑 PROCESANDO CÓDIGO 2FA (${code.trim()}) EN SESIÓN PUPPETEER`);
+  console.log("========================================================\n");
+
+  try {
+    const { submit2FACode } = await import("./scripts/mercadopublico_auth.js");
+    const result = await submit2FACode(sessionId, code.trim());
+    return res.json(result);
+  } catch (err: any) {
+    console.error("Error al aplicar código 2FA:", err);
+    return res.status(500).json({
+      success: false,
+      status: "Fallo 2FA",
+      error: err.message || "Error al ingresar el código 2FA en Puppeteer."
     });
   }
 });
