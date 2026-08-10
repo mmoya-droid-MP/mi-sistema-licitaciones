@@ -1,6 +1,6 @@
 /**
  * Script de Autenticación e Inspección Web para Mercado Público / ClaveÚnica
- * Tecnologías: Node.js + Playwright + Readline CLI
+ * Tecnologías: Node.js + @sparticuz/chromium + puppeteer-core + Readline CLI
  * 
  * Uso:
  *   node scripts/mercadopublico_auth.js
@@ -8,7 +8,8 @@
  *   CU_RUT="12345678-9" CU_PASSWORD="miPassword" node scripts/mercadopublico_auth.js
  */
 
-import { chromium } from 'playwright';
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 import readline from 'readline';
 import fs from 'fs';
 import path from 'path';
@@ -30,68 +31,84 @@ function promptCLI(queryText) {
   });
 }
 
+async function getExecutablePath() {
+  // Intentar navegadores locales si existen
+  const braveMacPath = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
+  const alternativePaths = [
+    process.env.BRAVE_PATH,
+    braveMacPath,
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/brave-browser',
+    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+  ].filter(Boolean);
+
+  for (const p of alternativePaths) {
+    if (fs.existsSync(p)) {
+      console.log(`🦁 Usando ejecutable de navegador local: ${p}`);
+      return p;
+    }
+  }
+
+  // En entorno de servidor/producción (Render, Cloud Run, Linux container): Usar @sparticuz/chromium
+  try {
+    const sparticuzExecPath = await chromium.executablePath();
+    console.log(`⚡ Usando ejecutable liviano de @sparticuz/chromium: ${sparticuzExecPath}`);
+    return sparticuzExecPath;
+  } catch (err) {
+    console.warn(`⚠️ Error al obtener ejecutablePath de @sparticuz/chromium: ${err.message}`);
+    return undefined;
+  }
+}
+
 async function runMercadoPublicoAuth() {
   console.log('\n================================================================');
   console.log('  🚀 BOT DE AUTENTICACIÓN E INSPECCIÓN MERCADO PÚBLICO - CLAVEÚNICA');
   console.log('================================================================\n');
 
-  // Launch options: default to headless: false for interactive manual login
-  const isHeadless = process.env.HEADLESS === 'true';
-  const USER_DATA_DIR = path.join(process.cwd(), 'playwright_user_data');
+  const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+  const execPath = await getExecutablePath();
+
+  // Argumentos recomendados por @sparticuz/chromium y requeridos por el usuario
+  const sparticuzArgs = (await chromium.args) || [];
+  const requiredFlags = ['--no-sandbox', '--disable-setuid-sandbox', '--headless=new', '--disable-dev-shm-usage', '--disable-gpu'];
+  const args = Array.from(new Set([...sparticuzArgs, ...requiredFlags]));
+
+  console.log('🌐 Configurando motor Puppeteer / Sparticuz Chromium...');
+  console.log(`📌 Flags activos: ${args.join(' ')}`);
 
   let browser;
-  let context;
   let page;
 
   try {
-    const braveMacPath = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
-    const bravePath = process.env.BRAVE_PATH || braveMacPath;
+    browser = await puppeteer.launch({
+      executablePath: execPath,
+      headless: isHeadless ? 'new' : false,
+      args,
+      defaultViewport: { width: 1280, height: 800 }
+    });
 
-    const launchOptions = {
-      headless: isHeadless, // Default visible interactive browser for manual login
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      viewport: { width: 1280, height: 800 },
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-    };
+    page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
-    if (fs.existsSync(bravePath)) {
-      console.log(`🦁 Configurando ejecutable de Brave Browser en macOS: ${bravePath}`);
-      launchOptions.executablePath = bravePath;
-    } else {
-      const alternativeBravePaths = [
-        '/usr/bin/brave-browser',
-        '/usr/bin/brave',
-        'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
-      ];
-      const foundPath = alternativeBravePaths.find((p) => fs.existsSync(p));
-      if (foundPath) {
-        console.log(`🦁 Configurando ejecutable de Brave Browser: ${foundPath}`);
-        launchOptions.executablePath = foundPath;
-      } else {
-        console.log('ℹ️ Ruta local de Brave no encontrada en el sistema. Usando Chromium integrado.');
-      }
-    }
-
-    console.log(`📂 Inicializando Contexto Persistente en: ${USER_DATA_DIR}`);
-    try {
-      const contextOptions = { ...launchOptions };
-      if (fs.existsSync(SESSION_FILE)) {
-        console.log(`🔑 Restaurando cookies y estado de sesión previa desde: ${SESSION_FILE}`);
-        contextOptions.storageState = SESSION_FILE;
-      }
-      context = await chromium.launchPersistentContext(USER_DATA_DIR, contextOptions);
-      page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
-    } catch (persistentErr) {
-      console.warn('⚠️ No se pudo lanzar contexto persistente directo, utilizando launch estándar:', persistentErr.message);
-      browser = await chromium.launch(launchOptions);
-      const contextOpts = fs.existsSync(SESSION_FILE) ? { storageState: SESSION_FILE } : {};
-      context = await browser.newContext(contextOpts);
-      page = await context.newPage();
-    }
-
-    // DESACTIVAR TIMEOUTS DE PLAYWRIGHT PARA PERMITIR TIEMPO DE INGRESO MANUAL SOBERANO AL USUARIO
+    // Desactivar timeouts para permitir interacción
     page.setDefaultTimeout(0);
     page.setDefaultNavigationTimeout(0);
+
+    // Cargar cookies de sesión previa si existen
+    if (fs.existsSync(SESSION_FILE)) {
+      try {
+        console.log(`🔑 Restaurando cookies y estado de sesión previa desde: ${SESSION_FILE}`);
+        const sessionData = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8'));
+        if (sessionData && Array.isArray(sessionData.cookies) && sessionData.cookies.length > 0) {
+          await page.setCookie(...sessionData.cookies);
+        }
+      } catch (sErr) {
+        console.warn('⚠️ No se pudieron restaurar las cookies de sesión previa:', sErr.message);
+      }
+    }
 
     console.log('\n----------------------------------------------------------------');
     console.log(' 1. CONSULTA PÚBLICA ESTABLE EN WWW.MERCADOPUBLICO.CL (Licitaciones LE26/LP26)');
@@ -103,11 +120,8 @@ async function runMercadoPublicoAuth() {
     console.log('\n----------------------------------------------------------------');
     console.log(' 2. MÓDULO PRIVADO CONVENIO MARCO (Acceso Autenticado)');
     console.log('----------------------------------------------------------------');
-    console.log('ℹ️ Para licitaciones públicas LE26/LP26 se utiliza la portada pública estable.');
-    console.log('ℹ️ Se accederá a proveedor.mercadopublico.cl ÚNICAMENTE si el usuario requiere cotizaciones de Convenio Marco.');
 
-    // Verificar si ya existe una sesión activa válida con cookies ASP.NET_SessionId y .ASPXAUTH
-    const currentCookies = await context.cookies();
+    const currentCookies = await page.cookies();
     const hasAuthCookie = currentCookies.some(c => c.name === '.ASPXAUTH' || c.name === 'ASP.NET_SessionId');
 
     if (hasAuthCookie) {
@@ -120,22 +134,24 @@ async function runMercadoPublicoAuth() {
         await page.goto('https://www.mercadopublico.cl/Home/Login', { waitUntil: 'domcontentloaded' });
       }
 
-      console.log('\n================================================================');
-      console.log('>>> PAUSA DE AUTENTICACIÓN MANUAL (CHECKPOINT):');
-      console.log('>>> Por favor ingresa tu RUT, ClaveÚnica y código OTP de 6 dígitos en el navegador.');
-      console.log('>>> Una vez autenticado y dentro del portal, presiona ENTER para continuar el flujo automático.');
-      console.log('================================================================\n');
+      if (!isHeadless && process.stdin.isTTY) {
+        console.log('\n================================================================');
+        console.log('>>> PAUSA DE AUTENTICACIÓN MANUAL (CHECKPOINT):');
+        console.log('>>> Por favor ingresa tu RUT, ClaveÚnica y código OTP de 6 dígitos en el navegador.');
+        console.log('>>> Una vez autenticado y dentro del portal, presiona ENTER para continuar el flujo automático.');
+        console.log('================================================================\n');
 
-      // Wait for manual login checkpoint
-      await promptCLI('👉 Presione [ENTER] en esta terminal una vez iniciada la sesión...');
+        await promptCLI('👉 Presione [ENTER] en esta terminal una vez iniciada la sesión...');
+      } else {
+        console.log('ℹ️ Ejecución en modo headless/servidor. Continuando extracción...');
+      }
     }
 
     console.log('\n----------------------------------------------------------------');
     console.log(' 3. NAVEGACIÓN DENTRO DEL PORTAL AUTENTICADO (Módulo Convenio Marco)');
     console.log('----------------------------------------------------------------');
     console.log('🌐 Navegando a "Administración del Convenio" -> "Oportunidades de Cotización"...');
-    
-    // Navegar directamente a la sección de Oportunidades de Cotización manteniendo cookies activas
+
     const convenioMarcoUrls = [
       'https://proveedores.mercadopublico.cl/AdministracionConvenio/OportunidadesCotizacion',
       'https://conveniomarco2.mercadopublico.cl/software3/quoteform/seller/quote/list',
@@ -153,21 +169,17 @@ async function runMercadoPublicoAuth() {
     }
 
     console.log('\n💾 Capturando y conservando cookies (ASP.NET_SessionId y .ASPXAUTH) y estado de la sesión activa...');
-    await context.storageState({ path: SESSION_FILE });
-    const savedCookies = await context.cookies();
+    const savedCookies = await page.cookies();
+    fs.writeFileSync(SESSION_FILE, JSON.stringify({ cookies: savedCookies }, null, 2), 'utf-8');
     const activeCookieNames = savedCookies.map(c => c.name).join(', ');
     console.log(`✅ Session state guardado con éxito en: ${SESSION_FILE}`);
     console.log(`🍪 Cookies capturadas: [ ${activeCookieNames} ]`);
 
-    // 4. Extracción con filtro de 30 DÍAS y palabras clave en TÍTULO + DESCRIPCIÓN
+    // 4. Extracción de datos
     console.log('\n----------------------------------------------------------------');
     console.log(' 4. EXTRACCIÓN Y BÚSQUEDA AVANZADA (Filtro 30 Días / Keywords)');
     console.log('----------------------------------------------------------------\n');
-    console.log('🔍 Aplicando filtro de ventana de 30 DÍAS...');
-    console.log('🎯 Diccionario Maestro de Términos (SET_PALABRAS_CLAVE_MASTER) aplicado al 100% en NOMBRE, DESCRIPCIÓN, ORGANISMO y CÓDIGO:');
-    console.log('   ["google maps", "maps api", "geolocalizacion", "gis", "visor territorial", "visor geografico", "creditos google", "comisaria virtual", "gcp", "google cloud", "aws", "azure", "cloud", "nube", "saas", "secops", "workspace", "desarrollo", "software", "mantencion evolutiva", "soporte de sistemas", "gemini", "ia", "ai", "microservicios", "ui/ux", "api", "licencia de software", "selico", "bi", "power bi", "qlik", "qlik sense", "etl", "gobernanza de datos", "migracion de datos", "datos", "dashboard", "ai-first", "gestor documental", "gestion documental", "bpm", "firma digital", "digitalizacion"]');
 
-    // Extracción de datos con validaciones exactas para 587-32-LE26 y CM-5802363-9800AAID
     const oportunidades = await page.evaluate(() => {
       const items = [
         {
@@ -226,16 +238,16 @@ async function runMercadoPublicoAuth() {
     console.log('\n📊 LISTADO DE OPORTUNIDADES EXTRAÍDAS CON FECHA EXACTA DE CIERRE (America/Santiago):');
     console.table(oportunidades);
 
-    // 5. Guardar archivo consolidado de resultados
     const reportPath = path.join(process.cwd(), 'reporte_licitaciones_mercadopublico.json');
     fs.writeFileSync(reportPath, JSON.stringify(oportunidades, null, 2), 'utf-8');
     console.log(`\n📁 Reporte consolidado exportado con éxito en: ${reportPath}`);
 
-    // 5. Pausa en Terminal solicitando ENTER para continuar
-    console.log('\n----------------------------------------------------------------');
-    console.log('  PAUSA DE CONTROL - INTERACCIÓN POR TERMINAL');
-    console.log('----------------------------------------------------------------');
-    await promptCLI('👉 Presione [ENTER] para continuar con el raspado/procesamiento de datos...');
+    if (!isHeadless && process.stdin.isTTY) {
+      console.log('\n----------------------------------------------------------------');
+      console.log('  PAUSA DE CONTROL - INTERACCIÓN POR TERMINAL');
+      console.log('----------------------------------------------------------------');
+      await promptCLI('👉 Presione [ENTER] para continuar con el raspado/procesamiento de datos...');
+    }
 
     console.log('\n✅ Proceso de raspado finalizado exitosamente.');
     console.log('================================================================');
@@ -278,18 +290,14 @@ async function runMercadoPublicoAuth() {
       error: err.message
     };
   } finally {
-    if (context && typeof context.close === 'function') {
-      console.log('🔒 Cerrando contexto de navegación Playwright...');
-      await context.close().catch(() => {});
-    }
-    if (browser && typeof browser.close === 'function') {
-      console.log('🔒 Cerrando instancia de navegador Playwright...');
+    if (browser) {
+      console.log('🔒 Cerrando instancia de navegador...');
       await browser.close().catch(() => {});
     }
   }
 }
 
-// Ejecutar si es invocado directamente desde la linea de comandos
+// Ejecutar si es invocado directamente desde la línea de comandos
 if (import.meta.url === `file://${process.argv[1]}`) {
   runMercadoPublicoAuth();
 }
