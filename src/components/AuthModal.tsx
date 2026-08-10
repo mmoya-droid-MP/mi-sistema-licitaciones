@@ -298,7 +298,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 Código Authenticator (6 dígitos)
               </label>
               <div className="relative">
-                <Key className="w-4 h-4 absolute left-3 top-3.5 text-cyan-400" />
+                <Key className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
                 <input
                   type="text"
                   required
@@ -307,8 +307,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                   value={twoFactorCode}
                   onChange={(e) => setTwoFactorCode(e.target.value.replace(/[^0-9]/g, ''))}
                   disabled={loading}
-                  className="w-full pl-9 pr-3 py-3 text-base tracking-widest font-mono font-bold border rounded-xl bg-slate-950 text-white border-cyan-500/70 focus:border-cyan-400 focus:outline-none shadow-inner placeholder:text-slate-400 [caret-color:white]"
-                  style={{ color: '#ffffff', caretColor: '#ffffff', WebkitTextFillColor: '#ffffff' }}
+                  className="w-full pl-9 pr-3 py-3 text-base tracking-widest font-mono font-bold border rounded-xl bg-slate-50 focus:bg-white text-slate-900 border-slate-200 focus:border-blue-500 focus:outline-none shadow-inner placeholder:text-slate-400 [caret-color:black]"
+                  style={{ color: '#000000', caretColor: '#000000', WebkitTextFillColor: '#000000' }}
                   autoFocus
                 />
               </div>
@@ -392,7 +392,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 Código Authenticator (6 dígitos)
               </label>
               <div className="relative">
-                <Smartphone className="w-4 h-4 absolute left-3 top-3 text-cyan-400" />
+                <Smartphone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
                   type="text"
                   maxLength={6}
@@ -400,8 +400,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                   value={twoFactorCode}
                   onChange={(e) => setTwoFactorCode(e.target.value.replace(/[^0-9]/g, ''))}
                   disabled={loading}
-                  className="w-full pl-9 pr-3 py-2.5 text-xs font-mono font-bold tracking-wider border rounded-xl bg-slate-900 text-white border-slate-700 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400 [caret-color:white]"
-                  style={{ color: '#ffffff', caretColor: '#ffffff', WebkitTextFillColor: '#ffffff' }}
+                  className="w-full pl-9 pr-3 py-2.5 text-xs font-mono font-bold tracking-wider border rounded-xl bg-slate-50 focus:bg-white text-slate-900 border-slate-200 focus:border-blue-500 focus:outline-none placeholder:text-slate-400 [caret-color:black]"
+                  style={{ color: '#000000', caretColor: '#000000', WebkitTextFillColor: '#000000' }}
                 />
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
