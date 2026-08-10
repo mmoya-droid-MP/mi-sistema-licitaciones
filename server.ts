@@ -12,23 +12,91 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
-// Default Mercado Público Ticket from environment or script
-let currentMpTicket = process.env.MERCADO_PUBLICO_TICKET || "DA0DDB29-A6DB-4B60-A862-AFCAD7FC31F8";
+// File path for global configuration persistence
+const CONFIG_FILE = path.join(process.cwd(), "config.json");
+
+const DEFAULT_CONFIG = {
+  keywords: "software, desarrollo, inteligencia artificial, google maps, gcp, cloud, bi",
+  scrapingFrequency: "30 min",
+  alertEmail: "alertas@empresa.cl",
+  ticket: process.env.MERCADO_PUBLICO_TICKET || "DA0DDB29-A6DB-4B60-A862-AFCAD7FC31F8",
+  updatedAt: new Date().toISOString()
+};
+
+function readConfig() {
+  if (fs.existsSync(CONFIG_FILE)) {
+    try {
+      const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_CONFIG, ...parsed };
+    } catch (e) {
+      console.warn("⚠️ Error leyendo config.json, usando valores por defecto.");
+    }
+  } else {
+    try {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_CONFIG, null, 2), "utf-8");
+    } catch (e) {
+      // ignore
+    }
+  }
+  return { ...DEFAULT_CONFIG };
+}
+
+function writeConfig(data: any) {
+  const current = readConfig();
+  const updated = {
+    ...current,
+    ...data,
+    updatedAt: new Date().toISOString()
+  };
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (e) {
+    console.error("❌ Error guardando config.json:", e);
+  }
+  return updated;
+}
+
+// Default Mercado Público Ticket initialized from config
+let currentMpTicket = readConfig().ticket || "DA0DDB29-A6DB-4B60-A862-AFCAD7FC31F8";
 
 // Health check endpoint
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Settings endpoint to view/update ticket
+// System Configuration endpoints
+app.get("/api/config", (_req, res) => {
+  res.json(readConfig());
+});
+
+app.post("/api/config", (req, res) => {
+  const { keywords, scrapingFrequency, alertEmail, ticket } = req.body || {};
+  const updated = writeConfig({
+    ...(keywords !== undefined && { keywords: String(keywords).trim() }),
+    ...(scrapingFrequency !== undefined && { scrapingFrequency: String(scrapingFrequency).trim() }),
+    ...(alertEmail !== undefined && { alertEmail: String(alertEmail).trim() }),
+    ...(ticket !== undefined && { ticket: String(ticket).trim() })
+  });
+
+  if (updated.ticket) {
+    currentMpTicket = updated.ticket;
+  }
+
+  res.json({ success: true, config: updated });
+});
+
+// Settings endpoint to view/update ticket (backward compatibility)
 app.get("/api/settings/ticket", (_req, res) => {
-  res.json({ ticket: currentMpTicket });
+  const cfg = readConfig();
+  res.json({ ticket: cfg.ticket || currentMpTicket });
 });
 
 app.post("/api/settings/ticket", (req, res) => {
   const { ticket } = req.body;
   if (ticket && typeof ticket === "string") {
     currentMpTicket = ticket.trim();
+    writeConfig({ ticket: currentMpTicket });
   }
   res.json({ success: true, ticket: currentMpTicket });
 });
@@ -430,37 +498,71 @@ app.get("/api/mp/session", (_req, res) => {
   const sessionPath = path.join(process.cwd(), "session_mp.json");
   if (fs.existsSync(sessionPath)) {
     const stats = fs.statSync(sessionPath);
+    const ageMs = Date.now() - stats.mtimeMs;
+    const isExpired = ageMs > 30 * 60 * 1000;
+
     return res.json({
-      hasSession: true,
+      hasSession: !isExpired,
+      isExpired,
       lastUpdated: stats.mtime.toISOString(),
-      status: "Éxito - Sesión activa guardada",
+      ageMinutes: Math.floor(ageMs / 60000),
+      status: isExpired ? "Sesión Expirada (>30 min)" : "Éxito - Sesión activa guardada",
+      message: isExpired
+        ? `La sesión fue guardada hace ${Math.floor(ageMs / 60000)} minutos y ha expirado. Por favor ingrese sus datos para re-autenticar.`
+        : "Sesión activa y lista para scraping automático.",
       sessionFile: "session_mp.json"
     });
   } else {
     return res.json({
       hasSession: false,
+      isExpired: false,
       status: "No autenticado",
-      message: "Ingrese sus credenciales de ClaveÚnica o ejecute 'npm run scrape:mp' para iniciar sesión."
+      message: "Ingrese RUT, Contraseña y Código Authenticator para conectar su cuenta."
     });
   }
 });
 
+// Endpoint to delete/reset Mercado Público session
+const handleLogout = (_req: express.Request, res: express.Response) => {
+  const sessionPath = path.join(process.cwd(), "session_mp.json");
+  if (fs.existsSync(sessionPath)) {
+    try {
+      fs.unlinkSync(sessionPath);
+      console.log("🧹 Sesión session_mp.json eliminada a petición del usuario.");
+    } catch (err: any) {
+      console.warn("⚠️ No se pudo eliminar session_mp.json:", err.message);
+    }
+  }
+  return res.json({
+    success: true,
+    hasSession: false,
+    status: "Sesión reseteada",
+    message: "La sesión previa fue eliminada correctamente."
+  });
+};
+
+app.delete("/api/mp/session", handleLogout);
+app.post("/api/mp/logout", handleLogout);
+
 // Endpoint to trigger Puppeteer automation for Mercado Público / ClaveÚnica authentication & scraping
 app.post("/api/mp/connect", async (req, res) => {
-  const { rut, password } = req.body || {};
+  const { rut, password, code2FA, twoFactorCode, code } = req.body || {};
 
   if (rut) process.env.CU_RUT = rut;
   if (password) process.env.CU_PASSWORD = password;
 
+  const finalCode = (code2FA || twoFactorCode || code || "").toString().trim();
+
   console.log("\n========================================================");
   console.log(" 🤖 SOLICITUD DE AUTENTICACIÓN MERCADO PÚBLICO / CLAVEÚNICA");
   if (rut) console.log(` 👤 RUT: ${rut}`);
+  if (finalCode) console.log(` 🔑 Código Authenticator provisto: ${finalCode}`);
   console.log(" 🌐 Lanzando navegador Puppeteer...");
   console.log("========================================================\n");
 
   try {
     const { runMercadoPublicoAuth } = await import("./scripts/mercadopublico_auth.js");
-    const result = await runMercadoPublicoAuth({ rut, password });
+    const result = await runMercadoPublicoAuth({ rut, password, code2FA: finalCode, twoFactorCode: finalCode, code: finalCode });
     return res.json(result);
   } catch (err: any) {
     console.error("Error ejecutando bot de Puppeteer:", err);

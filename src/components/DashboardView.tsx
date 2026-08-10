@@ -110,13 +110,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={openAuthModal}
-              className="flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg transition transform active:scale-95"
-            >
-              <ShieldCheck className="w-4 h-4 text-cyan-200" />
-              <span>Conectar ClaveÚnica</span>
-            </button>
+            {openAuthModal && (
+              <button
+                onClick={openAuthModal}
+                className="flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg transition transform active:scale-95"
+              >
+                <ShieldCheck className="w-4 h-4 text-cyan-200" />
+                <span>Conectar ClaveÚnica</span>
+              </button>
+            )}
             <button
               onClick={openReportsModal}
               className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg transition transform active:scale-95"

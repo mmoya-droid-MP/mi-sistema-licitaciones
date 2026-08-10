@@ -148,7 +148,7 @@ export async function submit2FACode(sessionId, code) {
   pending2FASessions.delete(sid);
 
   try {
-    console.log(`🔑 Aplicando código 2FA (${code}) en el navegador Puppeteer...`);
+    console.log(`🔑 Aplicando código Authenticator (${code}) en el navegador Puppeteer activo...`);
 
     const otpSelectors = [
       '#otpCode',
@@ -203,9 +203,9 @@ export async function submit2FACode(sessionId, code) {
 
     await new Promise(r => setTimeout(r, 4000));
 
-    console.log('💾 Capturando cookies de sesión tras 2FA...');
+    console.log('💾 Autenticación completada. Capturando y guardando nueva sesión activa...');
     const savedCookies = await page.cookies();
-    fs.writeFileSync(SESSION_FILE, JSON.stringify({ cookies: savedCookies }, null, 2), 'utf-8');
+    fs.writeFileSync(SESSION_FILE, JSON.stringify({ cookies: savedCookies, timestamp: new Date().toISOString() }, null, 2), 'utf-8');
 
     const oportunidades = await extractOpportunities(page);
     await browser.close().catch(() => {});
@@ -233,6 +233,16 @@ async function runMercadoPublicoAuth(options = {}) {
   console.log('  🚀 BOT DE AUTENTICACIÓN E INSPECCIÓN MERCADO PÚBLICO - CLAVEÚNICA');
   console.log('================================================================\n');
 
+  // Limpieza previa: eliminar siempre session_mp.json y no reutilizar cookies previas
+  if (fs.existsSync(SESSION_FILE)) {
+    try {
+      fs.unlinkSync(SESSION_FILE);
+      console.log('🧹 Limpieza previa: Archivo session_mp.json eliminado para inicio de sesión limpio sin cookies guardadas.');
+    } catch (e) {
+      console.warn('⚠️ No se pudo eliminar session_mp.json:', e.message);
+    }
+  }
+
   const rut = options.rut || process.env.CU_RUT;
   const password = options.password || process.env.CU_PASSWORD;
 
@@ -247,8 +257,8 @@ async function runMercadoPublicoAuth(options = {}) {
     headless: isHeadless,
   };
 
-  console.log('🌐 Configurando motor Puppeteer / Sparticuz Chromium...');
-  console.log(`📌 isHeadless: ${isHeadless}`);
+  console.log('🌐 Configurando motor Puppeteer limpio...');
+  console.log(`📌 Headless: ${isHeadless}`);
 
   let browser;
   let page;
@@ -262,39 +272,14 @@ async function runMercadoPublicoAuth(options = {}) {
     page.setDefaultTimeout(30000);
     page.setDefaultNavigationTimeout(30000);
 
-    // Cargar cookies de sesión previa si existen
-    if (fs.existsSync(SESSION_FILE)) {
-      try {
-        console.log(`🔑 Restaurando cookies y estado de sesión previa desde: ${SESSION_FILE}`);
-        const sessionData = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8'));
-        if (sessionData && Array.isArray(sessionData.cookies) && sessionData.cookies.length > 0) {
-          await page.setCookie(...sessionData.cookies);
-        }
-      } catch (sErr) {
-        console.warn('⚠️ No se pudieron restaurar las cookies de sesión previa:', sErr.message);
-      }
+    // Limpiar cookies del navegador
+    const client = await page.target().createCDPSession().catch(() => null);
+    if (client) {
+      await client.send('Network.clearBrowserCookies').catch(() => {});
+      await client.send('Network.clearBrowserCache').catch(() => {});
     }
 
-    console.log('🌐 Verificando estado de sesión en Mercado Público...');
-    await page.goto('https://www.mercadopublico.cl/BuscarLicitacion/Home/Buscar', { waitUntil: 'domcontentloaded' }).catch(() => {});
-
-    const currentCookies = await page.cookies();
-    const hasAuthCookie = currentCookies.some(c => c.name === '.ASPXAUTH' || c.name === 'ASP.NET_SessionId');
-
-    if (hasAuthCookie) {
-      console.log('✨ Cookies de sesión (.ASPXAUTH / ASP.NET_SessionId) detectadas. Reutilizando sesión sin re-autenticación.');
-      const oportunidades = await extractOpportunities(page);
-      await browser.close().catch(() => {});
-      return {
-        success: true,
-        status: 'Éxito de Sesión',
-        sessionSaved: true,
-        count: oportunidades.length,
-        oportunidades
-      };
-    }
-
-    // Navegar al portal de login
+    console.log('🌐 Paso 1: Abriendo portal de login de ClaveÚnica / Mercado Público...');
     try {
       await page.goto('https://proveedor.mercadopublico.cl/', { waitUntil: 'domcontentloaded' });
     } catch (e) {
@@ -303,7 +288,7 @@ async function runMercadoPublicoAuth(options = {}) {
 
     await new Promise(r => setTimeout(r, 2000));
 
-    // Si se enviaron RUT y contraseña, ingresarlos en ClaveÚnica
+    // Paso 1: Ingresar credenciales RUT y Contraseña
     if (rut && password) {
       console.log(`👤 Ingresando credenciales ClaveÚnica para RUT: ${rut}...`);
       const rutInput = await page.$('#run, #rut, input[name="run"], input[name="rut"]');
@@ -312,11 +297,11 @@ async function runMercadoPublicoAuth(options = {}) {
       if (rutInput && passInput) {
         await rutInput.click();
         await page.evaluate(el => { el.value = ''; }, rutInput);
-        await rutInput.type(rut.replace(/[^0-9kK]/g, ''), { delay: 50 });
+        await rutInput.type(rut.replace(/[^0-9kK]/g, ''), { delay: 40 });
 
         await passInput.click();
         await page.evaluate(el => { el.value = ''; }, passInput);
-        await passInput.type(password, { delay: 50 });
+        await passInput.type(password, { delay: 40 });
 
         const submitBtn = await page.$('button[type="submit"], #btn-submit, input[type="submit"]');
         if (submitBtn) {
@@ -325,23 +310,37 @@ async function runMercadoPublicoAuth(options = {}) {
           await page.keyboard.press('Enter');
         }
 
-        console.log('⏳ Esperando redirección a pantalla 2FA de ClaveÚnica...');
-        await new Promise(r => setTimeout(r, 3000));
+        console.log('⏳ Credenciales enviadas. Esperando la aparición del campo de código Authenticator (2FA)...');
       }
     }
 
-    // Detectar si requiere código 2FA
-    const pageUrl = page.url();
-    const pageContent = await page.content().catch(() => '');
-    const is2FAPrompt = pageUrl.includes('2fa') ||
-                        pageUrl.includes('otp') ||
-                        pageContent.includes('código') ||
-                        pageContent.includes('Authenticator') ||
-                        pageContent.includes('segunda clave') ||
-                        (await page.$('#otpCode, #code, input[name="code"], input[name="otp"], input[autocomplete="one-time-code"]')) !== null;
+    // Detección activa de 2FA
+    let is2FAActive = false;
+    try {
+      await page.waitForSelector(
+        '#otpCode, #code, #codigo, input[name="code"], input[name="otp"], input[autocomplete="one-time-code"], input[placeholder*="código"], input[placeholder*="6"]',
+        { timeout: 12000 }
+      );
+      is2FAActive = true;
+    } catch (err) {
+      const pageUrl = page.url();
+      const pageContent = await page.content().catch(() => '');
+      if (
+        pageUrl.includes('2fa') ||
+        pageUrl.includes('otp') ||
+        pageContent.includes('código') ||
+        pageContent.includes('Authenticator') ||
+        pageContent.includes('segunda clave')
+      ) {
+        is2FAActive = true;
+      }
+    }
 
-    if (is2FAPrompt || (rut && password)) {
-      console.log('\n🔒 Pantalla 2FA detectada en ClaveÚnica. Pausando ejecución de Puppeteer para recibir el código de 6 dígitos.');
+    const userProvidedCode = (options.code2FA || options.twoFactorCode || options.code || '').toString().trim();
+
+    if (is2FAActive || (rut && password)) {
+      console.log('\n🔒 Detección de 2FA: Formulario Authenticator activo en ClaveÚnica.');
+
       const sessionId = `mp_session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       let resolvePromise, rejectPromise;
@@ -367,24 +366,31 @@ async function runMercadoPublicoAuth(options = {}) {
         timeoutId
       });
 
+      // Si el usuario ya ingresó el código 2FA de 6 dígitos en el modal inicial, aplicarlo inmediatamente
+      if (userProvidedCode && userProvidedCode.length >= 6) {
+        console.log(`⚡ Código Authenticator (${userProvidedCode}) provisto en el formulario inicial. Aplicando inmediatamente...`);
+        return await submit2FACode(sessionId, userProvidedCode);
+      }
+
       if (!isHeadless && process.stdin.isTTY) {
         console.log('\n================================================================');
         console.log('>>> PAUSA DE AUTENTICACIÓN MANUAL (2FA TERMINAL):');
-        console.log('>>> Ingresa el código de 6 dígitos de tu aplicación Authenticator:');
+        console.log('>>> Ingrese el código de 6 dígitos de su Authenticator:');
         console.log('================================================================\n');
 
-        const code = await promptCLI('👉 Código 2FA: ');
+        const code = await promptCLI('👉 Código Authenticator: ');
         return await submit2FACode(sessionId, code);
       }
 
+      console.log('⏸️ Manteniendo sesión de Puppeteer abierta y solicitando código 2FA al frontend.');
       return {
         require2FA: true,
         sessionId,
-        message: 'Se requiere el código 2FA de 6 dígitos de ClaveÚnica / Authenticator.'
+        message: 'Ingrese el código de 6 dígitos de su Authenticator'
       };
     }
 
-    // Extraer oportunidades si no se requirió 2FA adicional
+    // Extraer oportunidades si no se requirió 2FA
     const oportunidades = await extractOpportunities(page);
     await browser.close().catch(() => {});
 

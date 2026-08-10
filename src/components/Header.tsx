@@ -146,17 +146,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Quick Actions & Settings */}
+          {/* Quick Actions */}
           <div className="flex items-center space-x-2">
-            <button
-              onClick={openAuthModal}
-              className="flex items-center space-x-1.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow transition active:scale-95"
-              title="Conectar Cuenta Mercado Público / ClaveÚnica"
-            >
-              <ShieldCheck className="w-4 h-4 text-cyan-200" />
-              <span>Conectar ClaveÚnica</span>
-            </button>
-
             <button
               onClick={openReportsModal}
               className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
@@ -173,14 +164,6 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Share2 className="w-4 h-4 text-cyan-400" />
               <span className="hidden lg:inline">Compartir</span>
-            </button>
-
-            <button
-              onClick={openSettings}
-              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-              title="Configuración API Ticket Mercado Público"
-            >
-              <Settings className="w-5 h-5" />
             </button>
           </div>
         </div>

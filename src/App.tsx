@@ -8,7 +8,7 @@ import { AlertsView } from './components/AlertsView';
 import { AIEvaluatorModal } from './components/AIEvaluatorModal';
 import { ShareModal } from './components/ShareModal';
 import { ReportsModal } from './components/ReportsModal';
-import { TicketSettingsModal } from './components/TicketSettingsModal';
+import { SystemSettingsModal } from './components/SystemSettingsModal';
 import { AuthModal } from './components/AuthModal';
 import { OrdenesCompraView } from './components/OrdenesCompraView';
 import {
@@ -52,6 +52,7 @@ export default function App() {
         notificaciones={notificaciones}
         setNotificaciones={setNotificaciones}
         openAuthModal={() => setShowAuthModal(true)}
+        openSettings={() => setShowSettingsModal(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
@@ -186,7 +187,7 @@ export default function App() {
       )}
 
       {showSettingsModal && (
-        <TicketSettingsModal onClose={() => setShowSettingsModal(false)} />
+        <SystemSettingsModal onClose={() => setShowSettingsModal(false)} />
       )}
 
       {showAuthModal && (
