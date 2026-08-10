@@ -1,0 +1,6 @@
+{
+  "name": "Mercado Público Chile - Radar & Postulaciones",
+  "description": "Plataforma de búsqueda de licitaciones, convenio marco y compra ágil de Mercado Público Chile con filtros avanzados, calendario, alertas y reportes PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

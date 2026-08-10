@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+input, select, textarea {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  opacity: 1 !important;
+}
+
+/* Protección global para inputs con clase blanco */
+.input-texto-blanco,
+.input-texto-blanco:focus,
+.input-texto-blanco:-webkit-autofill,
+.input-texto-blanco:-webkit-autofill:hover,
+.input-texto-blanco:-webkit-autofill:focus {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  background-color: #1e293b !important;
+  box-shadow: 0 0 0px 1000px #1e293b inset !important;
+}
