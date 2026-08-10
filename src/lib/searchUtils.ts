@@ -1,3 +1,5 @@
+import { extractFechaCierre, getItemOfficialUrl, calculateChileRemainingTime, cleanOfficialId } from './dateUtils';
+
 /**
  * Utility functions for Deep Search, Text Normalization, and Keyword Matching
  * supporting accent/diacritic removal, case-insensitivity, and searching across
@@ -142,7 +144,8 @@ export function matchesFlexibleTipo(itemTipo: string, selectedTipo: string, item
  */
 export function getItemCodigo(item: any): string {
   if (!item) return 'S/I';
-  return item.codigoId || item.codigo || item['Código ID'] || item['Codigo ID'] || item.codigoLicitacion || 'S/I';
+  const raw = item.codigoId || item.codigo || item['Código ID'] || item['Codigo ID'] || item.codigoLicitacion || item.id || 'S/I';
+  return cleanOfficialId(raw);
 }
 
 export function getItemNombre(item: any): string {
@@ -167,6 +170,8 @@ export function getItemTipo(item: any): string {
 
 export function getItemFechaCierre(item: any): string {
   if (!item) return new Date().toISOString();
+  const extracted = extractFechaCierre(item);
+  if (extracted) return extracted;
   return item.fechaCierre || item['Fecha Cierre (Chile CLT)'] || item['Fecha Cierre'] || item.fechaCierreOriginal || new Date().toISOString();
 }
 
@@ -183,8 +188,8 @@ export function getItemDiasRestantes(item: any): number {
   if (typeof item.diasRestantes === 'number') return item.diasRestantes;
   const fc = getItemFechaCierre(item);
   if (!fc) return 0;
-  const diff = new Date(fc).getTime() - new Date().getTime();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  const rem = calculateChileRemainingTime(fc);
+  return rem.dias;
 }
 
 export function getItemTags(item: any): string[] {
@@ -198,10 +203,10 @@ export function getItemTags(item: any): string[] {
 }
 
 export function getItemUrl(item: any): string {
-  const rawId = getItemCodigo(item);
-  if (!rawId || rawId === 'S/I') return 'https://www.mercadopublico.cl';
-  const cleanId = rawId.replace(/^CM-/, '');
-  return `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${encodeURIComponent(cleanId)}`;
+  if (!item) return 'https://www.mercadopublico.cl';
+  const codigo = getItemCodigo(item);
+  const tipo = getItemTipo(item);
+  return getItemOfficialUrl({ codigo, tipo, url: item.url });
 }
 
 export function getItemEstado(item: any): string {

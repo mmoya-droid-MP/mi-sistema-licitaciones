@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { LicitacionItem, TipoProceso, AlertaRule, SET_PALABRAS_CLAVE_MASTER } from '../types';
 import { openGoogleCalendar } from '../lib/googleCalendar';
-import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, isItemExpired } from '../lib/dateUtils';
+import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, isItemExpired, cleanOfficialId, extractFechaCierre } from '../lib/dateUtils';
 import { matchesDeepSearch, matchesAllTagsDeep, matchesFlexibleTipo, cleanTextPrefixes } from '../lib/searchUtils';
 import { CreateAlertModal } from './CreateAlertModal';
 
@@ -364,7 +364,8 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredLicitaciones.map((item) => {
             const expired = isItemExpired(item);
-            const timeInfo = calculateChileRemainingTime(item.fechaCierre);
+            const fc = extractFechaCierre(item) || item.fechaCierre;
+            const timeInfo = calculateChileRemainingTime(fc);
 
             return (
               <div
@@ -379,7 +380,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="bg-slate-900 text-white font-mono text-xs font-bold px-2 py-0.5 rounded">
-                        {item.codigo}
+                        {cleanOfficialId(item.codigo)}
                       </span>
                       <span
                         className={`text-xs font-semibold px-2 py-0.5 rounded ${
@@ -430,7 +431,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Cierre CLT:</span>
                       <span className={`font-mono font-bold ${expired ? 'text-red-600' : 'text-slate-900'}`}>
-                        {formatChileDateTime(item.fechaCierre)}
+                        {formatChileDateTime(fc)}
                       </span>
                     </div>
                   </div>
@@ -498,13 +499,14 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
               <tbody className="divide-y divide-slate-200 bg-white">
                 {filteredLicitaciones.map((item) => {
                   const expired = isItemExpired(item);
-                  const timeInfo = calculateChileRemainingTime(item.fechaCierre);
+                  const fc = extractFechaCierre(item) || item.fechaCierre;
+                  const timeInfo = calculateChileRemainingTime(fc);
 
                   return (
                     <tr key={item.codigo} className={`hover:bg-slate-50 transition ${expired ? 'bg-red-50/20' : ''}`}>
                       <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                         <span className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
-                          {item.codigo}
+                          {cleanOfficialId(item.codigo)}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-semibold text-slate-800 max-w-xs sm:max-w-md">
@@ -519,7 +521,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
                         </span>
                       </td>
                       <td className={`py-3 px-4 whitespace-nowrap font-mono font-semibold ${expired ? 'text-red-600' : 'text-slate-800'}`}>
-                        {formatChileDateTime(item.fechaCierre)}
+                        {formatChileDateTime(fc)}
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         {expired ? (

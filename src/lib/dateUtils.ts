@@ -1,49 +1,156 @@
 /**
- * Date and Time calculation utilities for Mercado Público
- * Timezone enforced: America/Santiago (CLT / UTC-4 or UTC-3)
+ * Date, ID and Time calculation utilities for Mercado Público
+ * Unified for Licitaciones, Convenio Marco, and Compra Ágil (COT)
+ * Timezone enforced: America/Santiago (Chile CLT / UTC-4 or CLST / UTC-3)
  */
 
 /**
- * Extracts EXCLUSIVELY the Fecha Cierre / Fecha Finalización field from Mercado Público or Cotización CM JSON.
- * Explicitly ignores secondary fields like FechaCreacion, FechaPublicacion, FechaInicioConsultas or FechaApertura.
+ * Cleans and normalizes official Mercado Público IDs, stripping trailing spaces,
+ * extra text, or prefixes to return exact official portal code (e.g. 587-32-LE26, CM-5802363-9800AAID, 2007-99-COT26).
+ */
+export function cleanOfficialId(rawId: any): string {
+  if (!rawId) return 'S/I';
+  let str = String(rawId).trim();
+  if (!str) return 'S/I';
+
+  // Strip common label prefixes
+  str = str.replace(/^(ID|Código|Codigo|N°|Nº)\s*:?\s*/i, '');
+
+  // Extract clean MP code regex pattern: e.g., 587-32-LE26, CM-5802363-9800AAID, 2007-99-COT26
+  const mpMatch = str.match(/((?:CM-)?\d+-\d+-[A-Za-z0-9]+|CM-\d+(?:-[A-Za-z0-9]+)?)/i);
+  if (mpMatch) {
+    return mpMatch[1].toUpperCase();
+  }
+
+  return str.replace(/[()\[\]]/g, '').trim().toUpperCase();
+}
+
+/**
+ * Extracts EXCLUSIVELY the Fecha Cierre / Fecha Finalización / Límite para Cotizar field
+ * for all 3 purchase types (Licitaciones, Convenio Marco, Compra Ágil / COT).
+ * Strictly avoids secondary dates like Apertura Técnica, Apertura Económica, Aclaraciones or Fecha Publicación.
  */
 export function extractFechaCierre(rawItem: any): string {
   if (!rawItem) return '';
 
-  // 1. Check if Cotizacion CM object
-  if (rawItem.Cotizacion) {
-    if (rawItem.Cotizacion.FechaCierre) return String(rawItem.Cotizacion.FechaCierre);
-    if (rawItem.Cotizacion.FechaFinalizacion) return String(rawItem.Cotizacion.FechaFinalizacion);
-    if (rawItem.Cotizacion.FechaTermino) return String(rawItem.Cotizacion.FechaTermino);
+  const rawId = String(rawItem.codigo || rawItem.codigoLicitacion || rawItem.id || '').toUpperCase();
+  const tipoUpper = String(rawItem.tipo || '').toUpperCase();
+  const isCot = rawId.includes('-COT') || rawId.includes('COT') || tipoUpper.includes('AGIL') || tipoUpper.includes('ÁGIL') || tipoUpper.includes('COT');
+  const isCM = rawId.startsWith('CM-') || tipoUpper.includes('CONVENIO') || tipoUpper.includes('MARCO');
+
+  // 1. Explicit Compra Ágil / COT extraction
+  if (isCot) {
+    if (rawItem.FechaCierreRecepcionOfertas) return String(rawItem.FechaCierreRecepcionOfertas);
+    if (rawItem['Fecha de cierre de recepción de ofertas']) return String(rawItem['Fecha de cierre de recepción de ofertas']);
+    if (rawItem.LimiteParaCotizar) return String(rawItem.LimiteParaCotizar);
+    if (rawItem['Límite para cotizar']) return String(rawItem['Límite para cotizar']);
+    if (rawItem.FechaLimiteCotizar) return String(rawItem.FechaLimiteCotizar);
+    if (rawItem.FechaCierreRecepcion) return String(rawItem.FechaCierreRecepcion);
+    if (rawItem['Fecha Cierre Recepción Ofertas']) return String(rawItem['Fecha Cierre Recepción Ofertas']);
+    if (rawItem.fecha_cierre_cotizacion) return String(rawItem.fecha_cierre_cotizacion);
+    if (rawItem.fecha_limite) return String(rawItem.fecha_limite);
   }
 
-  // 2. Direct Licitación fields
+  // 2. Convenio Marco (CM) & Solicitudes de Cotización
+  if (isCM || rawItem.Cotizacion) {
+    if (rawItem.FechaCierreCotizacion) return String(rawItem.FechaCierreCotizacion);
+    if (rawItem['Plazo límite para la recepción de cotizaciones/ofertas']) return String(rawItem['Plazo límite para la recepción de cotizaciones/ofertas']);
+    if (rawItem['Plazo limite para la recepcion de cotizaciones/ofertas']) return String(rawItem['Plazo limite para la recepcion de cotizaciones/ofertas']);
+    if (rawItem.Cotizacion) {
+      if (rawItem.Cotizacion.FechaCierreCotizacion) return String(rawItem.Cotizacion.FechaCierreCotizacion);
+      if (rawItem.Cotizacion.FechaCierre) return String(rawItem.Cotizacion.FechaCierre);
+      if (rawItem.Cotizacion.FechaFinalizacion) return String(rawItem.Cotizacion.FechaFinalizacion);
+      if (rawItem.Cotizacion.FechaTermino) return String(rawItem.Cotizacion.FechaTermino);
+      if (rawItem.Cotizacion.FechaCierreRecepcionOfertas) return String(rawItem.Cotizacion.FechaCierreRecepcionOfertas);
+    }
+    if (rawItem.fechaCierreCotizacion) return String(rawItem.fechaCierreCotizacion);
+  }
+
+  // 3. Licitaciones - Strict Priority for FechaCierreRecepcionOfertas / Fecha de Cierre / Cierre de Ofertas
+  if (rawItem.FechaCierreRecepcionOfertas) return String(rawItem.FechaCierreRecepcionOfertas);
+  if (rawItem['FechaCierreRecepcionOfertas']) return String(rawItem['FechaCierreRecepcionOfertas']);
+  if (rawItem['Fecha de Cierre']) return String(rawItem['Fecha de Cierre']);
+  if (rawItem['Fecha Cierre']) return String(rawItem['Fecha Cierre']);
+  if (rawItem['Cierre de Ofertas']) return String(rawItem['Cierre de Ofertas']);
   if (rawItem.FechaCierre) return String(rawItem.FechaCierre);
   if (rawItem.FechaFinalizacion) return String(rawItem.FechaFinalizacion);
   if (rawItem.FechaTermino) return String(rawItem.FechaTermino);
   if (rawItem.fechaCierre) return String(rawItem.fechaCierre);
+  if (rawItem.fechaCierreOriginal) return String(rawItem.fechaCierreOriginal);
+  if (rawItem.fechaCierreChile) return String(rawItem.fechaCierreChile);
 
   return '';
 }
 
 /**
  * Normalizes any valid date input to a Date object in Chile time (America/Santiago).
+ * Explicitly parses dates in CLT/CLST regardless of input origin (API or scraped HTML).
  */
 export function parseChileDate(dateInput: string | Date): Date {
   if (!dateInput) return new Date();
   if (dateInput instanceof Date) return dateInput;
 
-  // Handle strings like "2026-08-20T16:00:00", "2026-08-20 16:00:00", "2026-08-20 16:00"
-  let cleanStr = String(dateInput).trim().replace(' ', 'T');
-  if (!cleanStr.includes('T') && cleanStr.length === 10) {
-    cleanStr += 'T23:59:59';
+  const rawStr = String(dateInput).trim();
+  if (!rawStr) return new Date();
+
+  // Try parsing Spanish/Chilean date format DD/MM/YYYY or DD-MM-YYYY [HH:mm[:ss]]
+  const ddmmyyyyRegex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/;
+  const match = rawStr.match(ddmmyyyyRegex);
+
+  let year: number, month: number, day: number, hour = 23, minute = 59, second = 59;
+
+  if (match) {
+    day = parseInt(match[1], 10);
+    month = parseInt(match[2], 10) - 1; // 0-indexed month
+    year = parseInt(match[3], 10);
+    if (match[4] !== undefined) hour = parseInt(match[4], 10);
+    if (match[5] !== undefined) minute = parseInt(match[5], 10);
+    if (match[6] !== undefined) second = parseInt(match[6], 10);
+  } else {
+    // Standard ISO string or YYYY-MM-DD
+    let cleanStr = rawStr.replace(' ', 'T');
+    if (!cleanStr.includes('T') && cleanStr.length === 10) {
+      cleanStr += 'T23:59:59';
+    }
+    const temp = new Date(cleanStr);
+    if (isNaN(temp.getTime())) {
+      return new Date();
+    }
+    year = temp.getFullYear();
+    month = temp.getMonth();
+    day = temp.getDate();
+    hour = temp.getHours();
+    minute = temp.getMinutes();
+    second = temp.getSeconds();
   }
 
-  const parsed = new Date(cleanStr);
-  if (isNaN(parsed.getTime())) {
-    return new Date();
+  // Construct target timestamp normalized to America/Santiago timezone
+  try {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // Compute exact timestamp in America/Santiago
+    const utcEquivalent = new Date(Date.UTC(year, month, day, hour, minute, second));
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Santiago',
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(utcEquivalent);
+    let pY = 0, pM = 0, pD = 0, pH = 0, pMin = 0, pS = 0;
+    for (const p of parts) {
+      if (p.type === 'year') pY = parseInt(p.value, 10);
+      if (p.type === 'month') pM = parseInt(p.value, 10) - 1;
+      if (p.type === 'day') pD = parseInt(p.value, 10);
+      if (p.type === 'hour') pH = parseInt(p.value === '24' ? '0' : p.value, 10);
+      if (p.type === 'minute') pMin = parseInt(p.value, 10);
+      if (p.type === 'second') pS = parseInt(p.value, 10);
+    }
+    const formattedAsUtc = new Date(Date.UTC(pY, pM, pD, pH, pMin, pS));
+    const offsetMs = utcEquivalent.getTime() - formattedAsUtc.getTime();
+    return new Date(utcEquivalent.getTime() + offsetMs);
+  } catch (e) {
+    return new Date(year, month, day, hour, minute, second);
   }
-  return parsed;
 }
 
 /**
@@ -86,8 +193,8 @@ export function formatChileDateTime(dateInput: string | Date): string {
 }
 
 /**
- * Calculates dynamic remaining time (days and hours) in Chile Time zone (America/Santiago)
- * considering exact closing hour (e.g. 31/08/2026 15:00 hrs).
+ * Calculates dynamic remaining time (days and hours) normalized in Chile Timezone (America/Santiago).
+ * Compares closure date explicitly against current Chile time.
  */
 export function calculateChileRemainingTime(fechaCierreInput: string | Date) {
   const targetDate = parseChileDate(fechaCierreInput);
@@ -137,28 +244,50 @@ export function calculateChileRemainingTime(fechaCierreInput: string | Date) {
 }
 
 /**
- * Checks if a licitación or opportunity is expired dynamically based on current date.
- * Returns true if closing date has passed, remaining days < 0, or status is Cerrada/Vencida.
+ * Checks if a licitación or opportunity is expired dynamically based on current Chile date.
  */
 export function isItemExpired(item: { fechaCierre?: string; diasRestantes?: number; estado?: string }): boolean {
   if (!item) return false;
   if (item.estado === 'Cerrada' || item.estado === 'Vencida') return true;
   if (typeof item.diasRestantes === 'number' && item.diasRestantes < 0) return true;
-  if (item.fechaCierre) {
-    const timeInfo = calculateChileRemainingTime(item.fechaCierre);
+  const fc = extractFechaCierre(item) || item.fechaCierre;
+  if (fc) {
+    const timeInfo = calculateChileRemainingTime(fc);
     if (timeInfo.expirada) return true;
   }
   return false;
 }
 
 /**
- * Constructs the exact official URL for a Mercado Público opportunity.
- * Strips 'CM-' prefix from Convenio Marco IDs before building the BuscarLicitacion URL,
- * ensuring full alphanumeric suffixes (e.g. 5802363-9800AAID, 2496NNLU) are preserved.
+ * Constructs the official URL for a Mercado Público opportunity according to purchase type:
+ * - Compra Ágil (IDs with -COT / COT / 'Compra Ágil'): Points directly to https://www.mercadopublico.cl/CompraAgil/busqueda?codigo={cleanId}
+ * - Licitaciones / Convenio Marco: Points to https://www.mercadopublico.cl/BuscarLicitacion?codigo={cleanId}
+ * Preserves exact official ID (e.g. 2007-99-COT26).
  */
-export function getItemOfficialUrl(item: { codigo: string; tipo?: string; url?: string }): string {
-  if (!item || !item.codigo) return 'https://www.mercadopublico.cl';
-  const rawId = item.codigo.trim();
-  const cleanId = rawId.replace(/^CM-/, '');
+export function getItemOfficialUrl(item: { codigo?: string; codigoLicitacion?: string; id?: string; tipo?: string; url?: string }): string {
+  if (!item) return 'https://www.mercadopublico.cl';
+
+  const rawId = (item.codigo || item.codigoLicitacion || item.id || '').trim();
+  if (!rawId) return 'https://www.mercadopublico.cl';
+
+  const officialCode = cleanOfficialId(rawId);
+  if (officialCode === 'S/I') return 'https://www.mercadopublico.cl';
+
+  const cleanId = officialCode.replace(/^CM-/, '');
+  const tipoUpper = (item.tipo || '').toUpperCase();
+  const isCot = officialCode.includes('-COT') || officialCode.includes('COT') || tipoUpper.includes('AGIL') || tipoUpper.includes('ÁGIL') || tipoUpper.includes('COT');
+
+  // Compra Ágil direct URL
+  if (isCot) {
+    return `https://www.mercadopublico.cl/CompraAgil/busqueda?codigo=${encodeURIComponent(cleanId)}`;
+  }
+
+  // If item has a custom direct Convenio Marco URL, preserve it
+  if (item.url && item.url.startsWith('http') && !item.url.includes('BuscarLicitacion') && !item.url.includes('DetailsAcquisition')) {
+    return item.url;
+  }
+
+  // Standard Licitación / Convenio Marco URL
   return `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${encodeURIComponent(cleanId)}`;
 }
+

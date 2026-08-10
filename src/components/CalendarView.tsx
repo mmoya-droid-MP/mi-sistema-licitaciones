@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { LicitacionItem, Postulacion, OrdenCompraItem } from '../types';
 import { openGoogleCalendar, downloadICSFile } from '../lib/googleCalendar';
-import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl } from '../lib/dateUtils';
+import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, cleanOfficialId, extractFechaCierre } from '../lib/dateUtils';
 import { matchesDeepSearch, cleanTextPrefixes } from '../lib/searchUtils';
 
 interface CalendarViewProps {
@@ -104,7 +104,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
       itemsToProcess.forEach((item) => {
         try {
-          const d = new Date(item.fechaCierre);
+          const fc = extractFechaCierre(item) || item.fechaCierre;
+          const d = new Date(fc);
           if (!isNaN(d.getTime()) && d.getFullYear() === selectedYear && d.getMonth() === selectedMonth) {
             const day = d.getDate();
             if (!map[day]) map[day] = [];
@@ -115,7 +116,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
             map[day].push({
               title: item.nombre,
-              code: item.codigo,
+              code: cleanOfficialId(item.codigo),
               type: item.tipo,
               dateStr: d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
               item: item,
@@ -326,11 +327,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         <div className="divide-y divide-slate-100">
           {licitaciones
             .filter((item) => {
-              const d = new Date(item.fechaCierre);
+              const fc = extractFechaCierre(item) || item.fechaCierre;
+              const d = new Date(fc);
               return !isNaN(d.getTime()) && d.getFullYear() === selectedYear && d.getMonth() === selectedMonth;
             })
             .map((item) => {
-              const timeInfo = calculateChileRemainingTime(item.fechaCierre);
+              const fc = extractFechaCierre(item) || item.fechaCierre;
+              const timeInfo = calculateChileRemainingTime(fc);
               return (
                 <div
                   key={item.codigo}
@@ -339,10 +342,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
                       <span className="font-mono text-xs font-bold bg-slate-900 text-white px-2 py-0.5 rounded">
-                        {item.codigo}
+                        {cleanOfficialId(item.codigo)}
                       </span>
                       <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full">
-                        Cierre: {formatChileDateTime(item.fechaCierre)}
+                        Cierre: {formatChileDateTime(fc)}
                       </span>
                       <span
                         className={`text-xs font-bold px-2 py-0.5 rounded-full ${

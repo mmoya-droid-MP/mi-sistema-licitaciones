@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { LicitacionItem, Postulacion, AlertaRule, OrdenCompraItem } from '../types';
 import { openGoogleCalendar } from '../lib/googleCalendar';
-import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, isItemExpired } from '../lib/dateUtils';
+import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, isItemExpired, cleanOfficialId, extractFechaCierre } from '../lib/dateUtils';
 import { matchesDeepSearch, matchesFlexibleTipo, cleanTextPrefixes } from '../lib/searchUtils';
 import { CreateAlertModal } from './CreateAlertModal';
 
@@ -360,7 +360,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   ) : (
                     filteredTableItems.map((item) => {
                       const expired = isItemExpired(item);
-                      const timeInfo = calculateChileRemainingTime(item.fechaCierre);
+                      const fc = extractFechaCierre(item) || item.fechaCierre;
+                      const timeInfo = calculateChileRemainingTime(fc);
                       return (
                         <tr
                           key={item.codigo}
@@ -368,7 +369,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         >
                           <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                             <span className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px]">
-                              {item.codigo}
+                              {cleanOfficialId(item.codigo)}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-semibold text-slate-800 max-w-xs sm:max-w-md">
@@ -393,7 +394,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             </span>
                           </td>
                           <td className={`py-3 px-4 whitespace-nowrap font-mono font-semibold text-xs ${expired ? 'text-red-600' : 'text-slate-800'}`}>
-                            {formatChileDateTime(item.fechaCierre)}
+                            {formatChileDateTime(fc)}
                           </td>
                           <td className="py-3 px-4 text-center whitespace-nowrap">
                             {expired ? (
@@ -486,7 +487,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {ultimos7Dias.slice(0, 6).map((item) => {
-            const timeInfo = calculateChileRemainingTime(item.fechaCierre);
+            const fc = extractFechaCierre(item) || item.fechaCierre;
+            const timeInfo = calculateChileRemainingTime(fc);
             return (
               <div
                 key={item.codigo}
@@ -498,7 +500,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="bg-slate-900 text-white font-mono text-xs font-bold px-2 py-0.5 rounded">
-                        {item.codigo}
+                        {cleanOfficialId(item.codigo)}
                       </span>
                       <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">
                         {item.tipo}

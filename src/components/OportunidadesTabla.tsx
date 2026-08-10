@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Oportunidad } from '../types';
+import { getItemOfficialUrl, cleanOfficialId } from '../lib/dateUtils';
 
 interface Props {
   oportunidades?: Oportunidad[];
@@ -161,7 +162,7 @@ export const OportunidadesTabla: React.FC<Props> = ({
               >
                 {/* 1. ID */}
                 <div style={{ fontFamily: 'monospace', color: '#cbd5e1', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.id}
+                  {cleanOfficialId(item.id)}
                 </div>
 
                 {/* 2. NOMBRE */}
@@ -225,12 +226,9 @@ export const OportunidadesTabla: React.FC<Props> = ({
                     🔔 Alerta
                   </button>
 
-                  {/* Botón Postular */}
+                  {/* Botón Postular / Ficha */}
                   <a
-                    href={
-                      item.url ||
-                      `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?idLicitacion=${item.id}`
-                    }
+                    href={getItemOfficialUrl({ codigo: item.codigo || item.id, tipo: item.tipo, url: item.url })}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => {

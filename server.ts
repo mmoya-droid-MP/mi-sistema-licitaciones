@@ -475,18 +475,24 @@ app.get("/api/ordenescompra/search", async (req, res) => {
 
 // Helper endpoint for constructing public detail link
 app.get("/api/licitaciones/detail-url", (req, res) => {
-  const { code } = req.query;
+  const { code, tipo } = req.query;
   if (!code) {
     return res.status(400).json({ error: "Parámetro code es requerido" });
   }
 
   const codeStr = String(code).trim();
   const cleanId = codeStr.replace(/^CM-/, '');
-  const url = `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${encodeURIComponent(cleanId)}`;
+  const tipoStr = String(tipo || '').toLowerCase();
+  const isCot = codeStr.toUpperCase().includes('-COT') || codeStr.toUpperCase().includes('COT') || tipoStr.includes('agil') || tipoStr.includes('ágil');
+
+  const url = isCot
+    ? `https://www.mercadopublico.cl/CompraAgil/busqueda?codigo=${encodeURIComponent(cleanId)}`
+    : `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${encodeURIComponent(cleanId)}`;
 
   return res.json({
     code: codeStr,
     cleanCode: cleanId,
+    isCot,
     url,
     baseDomain: "https://www.mercadopublico.cl",
     requiresAuth: false

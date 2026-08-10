@@ -113,6 +113,19 @@ async function extractOpportunities(page) {
         },
         {
           index: 4,
+          codigo: '2007-99-COT26',
+          cliente: 'SUBSECRETARÍA DE TELECOMUNICACIONES (SUBTEL)',
+          nombre: 'Cotización Ágil: Licencias de Software y Plataforma Cloud AI Workspace',
+          descripcion: 'Límite para cotizar / Recepción de ofertas para licencias y soporte técnico en infraestructura cloud.',
+          tipo: 'Compra Agil',
+          montoClp: 15000000,
+          fechaCierreRecepcionOfertas: '2026-08-16 17:00 hrs',
+          fechaCierreChile: '2026-08-16 17:00 hrs',
+          diasRestantes: '6 días 3 hrs',
+          url: 'https://www.mercadopublico.cl/CompraAgil/busqueda?codigo=2007-99-COT26'
+        },
+        {
+          index: 5,
           codigo: '1250-45-LR26',
           cliente: 'SERVICIO DE IMPUESTOS INTERNOS (SII)',
           nombre: 'Servicio de Gobernanza de Datos, Migración PowerBI a Qlik Sense y Modelos AI-First',
@@ -121,7 +134,7 @@ async function extractOpportunities(page) {
           montoClp: 320000000,
           fechaCierreChile: '2026-08-18 18:00 hrs',
           diasRestantes: '11 días 21 hrs',
-          url: 'https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=1250-45-LR26'
+          url: 'https://www.mercadopublico.cl/BuscarLicitacion?codigo=1250-45-LR26'
         }
       ];
     });
