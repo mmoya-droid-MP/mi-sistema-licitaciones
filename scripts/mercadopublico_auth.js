@@ -31,8 +31,14 @@ function promptCLI(queryText) {
   });
 }
 
-async function getExecutablePath() {
-  // Intentar navegadores locales si existen
+async function runMercadoPublicoAuth() {
+  console.log('\n================================================================');
+  console.log('  🚀 BOT DE AUTENTICACIÓN E INSPECCIÓN MERCADO PÚBLICO - CLAVEÚNICA');
+  console.log('================================================================\n');
+
+  let execPath;
+  let isLocalBrowser = false;
+
   const braveMacPath = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
   const alternativePaths = [
     process.env.BRAVE_PATH,
@@ -47,48 +53,37 @@ async function getExecutablePath() {
 
   for (const p of alternativePaths) {
     if (fs.existsSync(p)) {
-      console.log(`🦁 Usando ejecutable de navegador local: ${p}`);
-      return p;
+      execPath = p;
+      isLocalBrowser = true;
+      console.log(`🦁 Usando ejecutable de navegador local: ${execPath}`);
+      break;
     }
   }
 
-  // En entorno de servidor/producción (Render, Cloud Run, Linux container): Usar @sparticuz/chromium
-  try {
-    const sparticuzExecPath = await chromium.executablePath();
-    console.log(`⚡ Usando ejecutable liviano de @sparticuz/chromium: ${sparticuzExecPath}`);
-    return sparticuzExecPath;
-  } catch (err) {
-    console.warn(`⚠️ Error al obtener ejecutablePath de @sparticuz/chromium: ${err.message}`);
-    return undefined;
+  if (!isLocalBrowser) {
+    execPath = await chromium.executablePath();
+    console.log(`⚡ Usando ejecutable liviano de @sparticuz/chromium: ${execPath}`);
   }
-}
 
-async function runMercadoPublicoAuth() {
-  console.log('\n================================================================');
-  console.log('  🚀 BOT DE AUTENTICACIÓN E INSPECCIÓN MERCADO PÚBLICO - CLAVEÚNICA');
-  console.log('================================================================\n');
-
-  const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
-  const execPath = await getExecutablePath();
-
-  // Argumentos recomendados por @sparticuz/chromium y requeridos por el usuario
-  const sparticuzArgs = (await chromium.args) || [];
-  const requiredFlags = ['--no-sandbox', '--disable-setuid-sandbox', '--headless=new', '--disable-dev-shm-usage', '--disable-gpu'];
-  const args = Array.from(new Set([...sparticuzArgs, ...requiredFlags]));
+  const launchOptions = isLocalBrowser ? {
+    executablePath: execPath,
+    headless: (process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production' || !!process.env.RENDER) ? 'new' : false,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    defaultViewport: { width: 1280, height: 800 }
+  } : {
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: execPath,
+    headless: chromium.headless,
+  };
 
   console.log('🌐 Configurando motor Puppeteer / Sparticuz Chromium...');
-  console.log(`📌 Flags activos: ${args.join(' ')}`);
 
   let browser;
   let page;
 
   try {
-    browser = await puppeteer.launch({
-      executablePath: execPath,
-      headless: isHeadless ? 'new' : false,
-      args,
-      defaultViewport: { width: 1280, height: 800 }
-    });
+    browser = await puppeteer.launch(launchOptions);
 
     page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
