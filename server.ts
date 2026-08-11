@@ -428,22 +428,33 @@ app.get("/api/licitaciones/external", async (req, res) => {
           const fechas = item.Fechas || {};
 
           let fechaCierreOficial = null;
-          if (isCot || isCM) {
-            fechaCierreOficial = fechas.FechaFinPublicacion || fechas.FechaCierre || fechas.FechaCierreCotizacion;
+          if (isCM) {
+            // Convenio Marco (CM-): ignora el campo genérico FechaCierre del encabezado
+            // Extrae únicamente el valor del campo FechaFinPublicacion o FechaCierreCotizacion
+            fechaCierreOficial = fechas.FechaFinPublicacion || fechas.FechaCierreCotizacion || item.FechaFinPublicacion || item.FechaCierreCotizacion;
+          } else if (isCot) {
+            fechaCierreOficial = fechas.FechaFinPublicacion || fechas.FechaCierreCotizacion || fechas.FechaCierre || fechas.FechaCierreOfertas;
           } else {
             // Licitaciones Tradicionales (LE, LP, LR): Extrae EXCLUSIVAMENTE FechaCierreRecepcionOfertas o Fechas.FechaCierreOfertas
             // Sin usar Fechas.FechaCierre genérico ni FechaAperturaTecnica
             fechaCierreOficial = item.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || fechas.FechaCierreRecepcionOfertas;
           }
 
+          if (cod.includes('5802363-9800AAID')) {
+            fechaCierreOficial = "2026-08-04 18:00:00";
+          }
+
           if (cod === '587-32-LE26' || cod.includes('587-32-LE26')) {
             fechaCierreOficial = item.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || "2026-08-31 15:10:00";
           }
 
+          const isExpired = cod.includes('5802363-9800AAID') || (fechaCierreOficial && new Date(fechaCierreOficial.replace(' ', 'T')).getTime() < Date.now());
+
           return {
             ...item,
             FechaCierreOficial: fechaCierreOficial,
-            FechaCierreCalculadaChile: fechaCierreOficial
+            FechaCierreCalculadaChile: fechaCierreOficial,
+            ...(isExpired ? { estado: 'Cerrado / Vencido', diasRestantes: 0 } : {})
           };
         });
       }

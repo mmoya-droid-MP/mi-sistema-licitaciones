@@ -46,6 +46,8 @@ export interface LicitacionItem {
   fechaActualizada?: boolean; // indicates key date updated
   FechaCierreRecepcionOfertas?: string;
   FechaCierreOficial?: string;
+  FechaFinPublicacion?: string;
+  FechaCierreCotizacion?: string;
 }
 
 export type EstadoPostulacion = 'Interes' | 'TDR' | 'Preparando' | 'Enviada' | 'Adjudicada' | 'Desestimada';

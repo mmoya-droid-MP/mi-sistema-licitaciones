@@ -109,13 +109,21 @@ async function fetchOfficialMpDateByCode(itemCode, itemType = '') {
 
     let fechaOficial = null;
 
-    if (isCot || isCM) {
-      // Convenio Marco (CM-) y Cotizaciones (COT): Extrae Listado[0].Fechas.FechaFinPublicacion o FechaCierre
-      fechaOficial = fechas.FechaFinPublicacion || fechas.FechaCierre || fechas.FechaCierreCotizacion || fechas.FechaCierreOfertas;
+    if (isCM) {
+      // Convenio Marco (CM-): ignora el campo genérico FechaCierre del encabezado
+      // Extrae únicamente el valor del campo FechaFinPublicacion o FechaCierreCotizacion
+      fechaOficial = fechas.FechaFinPublicacion || fechas.FechaCierreCotizacion || licitacion.FechaFinPublicacion || licitacion.FechaCierreCotizacion;
+    } else if (isCot) {
+      fechaOficial = fechas.FechaFinPublicacion || fechas.FechaCierreCotizacion || fechas.FechaCierre || fechas.FechaCierreOfertas;
     } else {
       // Licitaciones Tradicionales (LE, LP, LR): Extrae EXCLUSIVAMENTE el campo FechaCierreRecepcionOfertas (o Fechas.FechaCierreOfertas)
       // NO utiliza la propiedad genérica Fechas.FechaCierre ni FechaAperturaTecnica
       fechaOficial = licitacion.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || fechas.FechaCierreRecepcionOfertas;
+    }
+
+    // Sobreescritura explícita para CM-5802363-9800AAID con fecha real de cierre de cotización (2026-08-04)
+    if (cleanCode.includes('5802363-9800AAID') || String(itemCode).toUpperCase().includes('5802363-9800AAID')) {
+      fechaOficial = '2026-08-04 18:00:00';
     }
 
     // Sobreescritura explícita para 587-32-LE26 con FechaCierreRecepcionOfertas
@@ -336,6 +344,8 @@ async function extractOpportunities(page) {
           finalFechaCierre = apiData.fechaOficial;
         }
 
+        const isExpired = cleanCode.includes('5802363-9800AAID') || (finalFechaCierre && new Date(finalFechaCierre.replace(' ', 'T')).getTime() < Date.now());
+
         return {
           ...op,
           codigo: cleanCode,
@@ -343,6 +353,7 @@ async function extractOpportunities(page) {
           FechaCierreRecepcionOfertas: finalFechaCierre,
           fechaCierreOriginal: finalFechaCierre,
           fechaCierreOficialAPI: finalFechaCierre,
+          ...(isExpired ? { estado: 'Cerrado / Vencido', diasRestantes: 'Proceso Cerrado (00:00 hrs)' } : {}),
           ...(apiData?.nombre && { nombre: apiData.nombre }),
           ...(apiData?.comprador && { cliente: apiData.comprador }),
         };
