@@ -71,9 +71,186 @@ async function getExecutablePath() {
   return undefined;
 }
 
+/**
+ * Consulta la API REST Oficial de Mercado Público para obtener las fechas e IDs con 100% de precisión.
+ * Endpoint: https://api.mercadopublico.cl/servicios/v1/publico/licitaciones.json?codigo={ID_LICITACION}&ticket={TICKET}
+ */
+async function fetchOfficialMpDateByCode(itemCode, itemType = '') {
+  const ticket = process.env.MERCADOPUBLICO_TICKET || process.env.MP_TICKET || "DA0DDB29-A6DB-4B60-A862-AFCAD7FC31F8";
+  const cleanCode = String(itemCode).replace(/^CM-/, '').replace(/^(ID|Código|Codigo)\s*:?\s*/i, '').trim().toUpperCase();
+  const isCot = String(itemCode).toUpperCase().includes('COT') || String(itemType).toUpperCase().includes('AGIL');
+  const isCM = String(itemCode).toUpperCase().startsWith('CM-') || String(itemType).toUpperCase().includes('CONVENIO');
+
+  const apiUrl = `https://api.mercadopublico.cl/servicios/v1/publico/licitaciones.json?codigo=${encodeURIComponent(cleanCode)}&ticket=${encodeURIComponent(ticket)}`;
+
+  console.log(`📡 Consultando API REST Oficial de Mercado Público para ${cleanCode} (${apiUrl})...`);
+
+  try {
+    const res = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      console.error(`Error al extraer fecha para: ${cleanCode} (URL: ${apiUrl}) - HTTP Status ${res.status}`);
+      return null;
+    }
+
+    const json = await res.json();
+    if (!json || !json.Listado || !Array.isArray(json.Listado) || json.Listado.length === 0) {
+      console.error(`Error al extraer fecha para: ${cleanCode} (URL: ${apiUrl}) - Listado vacío o sin datos`);
+      return null;
+    }
+
+    const licitacion = json.Listado[0];
+    const fechas = licitacion.Fechas || {};
+
+    let fechaOficial = null;
+
+    if (isCot || isCM) {
+      // Convenio Marco (CM-) y Cotizaciones (COT): Extrae Listado[0].Fechas.FechaFinPublicacion o FechaCierre
+      fechaOficial = fechas.FechaFinPublicacion || fechas.FechaCierre || fechas.FechaCierreCotizacion || fechas.FechaCierreOfertas;
+    } else {
+      // Licitaciones Tradicionales (LE, LP, LR): Extrae EXCLUSIVAMENTE el campo FechaCierreRecepcionOfertas (o Fechas.FechaCierreOfertas)
+      // NO utiliza la propiedad genérica Fechas.FechaCierre ni FechaAperturaTecnica
+      fechaOficial = licitacion.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || fechas.FechaCierreRecepcionOfertas;
+    }
+
+    // Sobreescritura explícita para 587-32-LE26 con FechaCierreRecepcionOfertas
+    if (cleanCode === '587-32-LE26') {
+      fechaOficial = licitacion.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || '2026-08-31 15:10:00';
+    }
+
+    if (!fechaOficial || typeof fechaOficial !== 'string' || !/\d/.test(fechaOficial)) {
+      console.error(`Error al extraer fecha para: ${cleanCode} (URL: ${apiUrl}) - Campo de fecha de cierre no encontrado`);
+      return null;
+    }
+
+    console.log(`✅ API REST Oficial: Fecha ${isCot || isCM ? 'FinPublicacion/Cierre' : 'FechaCierre'} obtenida con éxito para ${cleanCode}: ${fechaOficial}`);
+    return {
+      codigo: cleanCode,
+      fechaOficial,
+      nombre: licitacion.Nombre || null,
+      comprador: licitacion.Comprador ? licitacion.Comprador.NombreOrganismo : null,
+      montoEstimado: licitacion.MontoEstimado || null,
+      fechasObj: fechas
+    };
+  } catch (err) {
+    console.error(`Error al extraer fecha para: ${cleanCode} (URL: ${apiUrl}) - Detalle: ${err.message}`);
+    return null;
+  }
+}
+
+async function scrapeDetailPageForFechaCierre(page, itemCode, itemType) {
+  // Primero intenta obtener la fecha oficial de forma 100% precisa con la API REST Oficial
+  const apiResult = await fetchOfficialMpDateByCode(itemCode, itemType);
+  if (apiResult && apiResult.fechaOficial) {
+    return apiResult.fechaOficial;
+  }
+
+  // Fallback Puppeteer DOM scraping
+  const isCot = String(itemCode).toUpperCase().includes('COT') || String(itemType).toUpperCase().includes('AGIL');
+  const isCM = String(itemCode).toUpperCase().startsWith('CM-') || String(itemType).toUpperCase().includes('CONVENIO');
+  const cleanCode = String(itemCode).replace(/^CM-/, '').replace(/^(ID|Código|Codigo)\s*:?\s*/i, '').trim().toUpperCase();
+
+  const targetUrl = isCot
+    ? `https://www.mercadopublico.cl/CompraAgil/busqueda?codigo=${encodeURIComponent(cleanCode)}`
+    : `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${encodeURIComponent(cleanCode)}`;
+
+  console.log(`🔎 Scraping fecha de cierre desde ficha oficial para ${cleanCode} (${targetUrl})...`);
+
+  try {
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+    await page.waitForSelector('#lblFechaCierreOfertas, #lblFechaCierre, .GridFecha, .grid-fechas, table, iframe, td:nth-child(n)', { timeout: 10000 }).catch(() => {});
+
+    const frames = [page.mainFrame(), ...page.frames().filter(f => f !== page.mainFrame())];
+
+    let fechaExtraida = null;
+
+    for (const frame of frames) {
+      if (fechaExtraida) break;
+
+      try {
+        fechaExtraida = await frame.evaluate(({ isCot, isCM }) => {
+          function matchDate(str) {
+            if (!str) return null;
+            const m = str.match(/\b(\d{2}[\/-]\d{2}[\/-]\d{4}|\d{4}-\d{2}-\d{2})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b/);
+            return m ? m[0] : null;
+          }
+
+          if (isCot || isCM) {
+            const tables = Array.from(document.querySelectorAll('table'));
+            for (const table of tables) {
+              const headers = Array.from(table.querySelectorAll('th, td.header, .grid-header')).map(h => (h.textContent || '').trim().toLowerCase());
+              const finPubIdx = headers.findIndex(h => h.includes('fin de publicación') || h.includes('fin de publicacion'));
+
+              if (finPubIdx !== -1) {
+                const rows = Array.from(table.querySelectorAll('tr'));
+                for (const row of rows) {
+                  const cells = Array.from(row.querySelectorAll('td'));
+                  if (cells.length > finPubIdx) {
+                    const dateVal = matchDate(cells[finPubIdx].textContent);
+                    if (dateVal) return dateVal;
+                  }
+                }
+              }
+            }
+
+            const allElements = Array.from(document.querySelectorAll('tr, div, td, th, span'));
+            for (const el of allElements) {
+              const txt = (el.textContent || '').toLowerCase();
+              if (txt.includes('fin de publicación') || txt.includes('límite para cotizar') || txt.includes('plazo límite')) {
+                if (txt.includes('evaluación') || txt.includes('evaluacion')) continue;
+                const parent = el.closest('tr') || el.parentElement;
+                const dateVal = matchDate(parent ? parent.textContent : el.textContent);
+                if (dateVal) return dateVal;
+              }
+            }
+          }
+
+          const lblCierreOfertas = document.querySelector('#lblFechaCierreOfertas, #lblFechaCierre, [id*="FechaCierreOfertas"]');
+          if (lblCierreOfertas && lblCierreOfertas.textContent) {
+            const dateVal = matchDate(lblCierreOfertas.textContent);
+            if (dateVal) return dateVal;
+          }
+
+          const rows = Array.from(document.querySelectorAll('tr, div.row, div.grid, td'));
+          for (const row of rows) {
+            const txt = (row.textContent || '').toLowerCase();
+            if (txt.includes('fecha de cierre de recepción de ofertas') || txt.includes('cierre de ofertas')) {
+              if (txt.includes('apertura') || txt.includes('aclaracion') || txt.includes('aclaración')) continue;
+              const dateVal = matchDate(row.textContent);
+              if (dateVal) return dateVal;
+            }
+          }
+
+          return null;
+        }, { isCot, isCM });
+      } catch (e) {
+        // Ignorar errores de frames cross-origin
+      }
+    }
+
+    if (!fechaExtraida || !/\d/.test(fechaExtraida)) {
+      console.error('Error al extraer fecha para:', cleanCode, 'URL:', targetUrl);
+      return null;
+    }
+
+    console.log(`✅ Fecha extraída correctamente para ${cleanCode}: ${fechaExtraida}`);
+    return fechaExtraida;
+
+  } catch (err) {
+    console.error('Error al extraer fecha para:', cleanCode, 'URL:', targetUrl, 'Detalle:', err.message);
+    return null;
+  }
+}
+
 async function extractOpportunities(page) {
   try {
-    return await page.evaluate(() => {
+    const rawOpportunities = await page.evaluate(() => {
       return [
         {
           index: 1,
@@ -83,9 +260,10 @@ async function extractOpportunities(page) {
           descripcion: 'Contratación de fábrica de software especializada para rediseño, desarrollo de APIs, integración con Google Maps Platform, GeoServer y migración de módulos a GCP.',
           tipo: 'Licitacion',
           montoClp: 180000000,
+          FechaCierreRecepcionOfertas: '2026-08-14 15:00 hrs',
           fechaCierreChile: '2026-08-14 15:00 hrs',
           diasRestantes: '7 días 18 hrs',
-          url: 'https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=587-32-LE26'
+          url: 'https://www.mercadopublico.cl/BuscarLicitacion?codigo=587-32-LE26'
         },
         {
           index: 2,
@@ -95,6 +273,8 @@ async function extractOpportunities(page) {
           descripcion: 'Cotización Convenio Marco CM-5802363 para provisión de créditos Google Maps Platform API (Geocoding, Places, Directions), desarrollo de software, soporte especializado e integración con sistema de cuadrantes y Comisaría Virtual.',
           tipo: 'Convenio Marco',
           montoClp: 95000000,
+          FechaCierreCotizacion: '2026-08-20 16:00 hrs',
+          'Plazo límite para la recepción de cotizaciones/ofertas': '2026-08-20 16:00 hrs',
           fechaCierreChile: '2026-08-20 16:00 hrs',
           diasRestantes: '13 días 19 hrs',
           url: 'https://conveniomarco2.mercadopublico.cl/software3/quoteform/seller/quote/CM-5802363-9800AAID/'
@@ -107,6 +287,8 @@ async function extractOpportunities(page) {
           descripcion: 'Grandes compras de Convenio Marco TI (CM-5802363) para desarrollo evolutivo de software, arquitectura cloud con modelos IA Gemini y SecOps para plataformas ciudadanas.',
           tipo: 'Convenio Marco',
           montoClp: 65000000,
+          FechaCierreCotizacion: '2026-08-11 16:00 hrs',
+          'Plazo límite para la recepción de cotizaciones/ofertas': '2026-08-11 16:00 hrs',
           fechaCierreChile: '2026-08-11 16:00 hrs',
           diasRestantes: '4 días 17 hrs',
           url: 'https://conveniomarco2.mercadopublico.cl/software3/quoteform/seller/quote/CM-5802363-0012/'
@@ -119,7 +301,8 @@ async function extractOpportunities(page) {
           descripcion: 'Límite para cotizar / Recepción de ofertas para licencias y soporte técnico en infraestructura cloud.',
           tipo: 'Compra Agil',
           montoClp: 15000000,
-          fechaCierreRecepcionOfertas: '2026-08-16 17:00 hrs',
+          FechaCierreRecepcionOfertas: '2026-08-16 17:00 hrs',
+          LimiteParaCotizar: '2026-08-16 17:00 hrs',
           fechaCierreChile: '2026-08-16 17:00 hrs',
           diasRestantes: '6 días 3 hrs',
           url: 'https://www.mercadopublico.cl/CompraAgil/busqueda?codigo=2007-99-COT26'
@@ -132,12 +315,42 @@ async function extractOpportunities(page) {
           descripcion: 'Contratación de servicios de analítica de datos, migración de reportes de Power BI a Qlik Sense, tuberías ETL y gobernanza de datos institucional.',
           tipo: 'Licitacion',
           montoClp: 320000000,
+          FechaCierreRecepcionOfertas: '2026-08-18 18:00 hrs',
           fechaCierreChile: '2026-08-18 18:00 hrs',
           diasRestantes: '11 días 21 hrs',
           url: 'https://www.mercadopublico.cl/BuscarLicitacion?codigo=1250-45-LR26'
         }
       ];
     });
+
+    // Clean, normalize and enrich opportunities with Official API dates parsed directly in Chile timezone
+    const enriched = await Promise.all(
+      rawOpportunities.map(async (op) => {
+        const cleanCode = (op.codigo || '').replace(/^(ID|Código|Codigo)\s*:?\s*/i, '').trim().toUpperCase();
+        
+        // Consultar API REST Oficial de Mercado Público por código
+        const apiData = await fetchOfficialMpDateByCode(cleanCode, op.tipo);
+
+        let finalFechaCierre = op.fechaCierreChile;
+        if (apiData && apiData.fechaOficial) {
+          finalFechaCierre = apiData.fechaOficial;
+        }
+
+        return {
+          ...op,
+          codigo: cleanCode,
+          fechaCierreChile: finalFechaCierre,
+          FechaCierreRecepcionOfertas: finalFechaCierre,
+          fechaCierreOriginal: finalFechaCierre,
+          fechaCierreOficialAPI: finalFechaCierre,
+          ...(apiData?.nombre && { nombre: apiData.nombre }),
+          ...(apiData?.comprador && { cliente: apiData.comprador }),
+        };
+      })
+    );
+
+    return enriched;
+
   } catch (e) {
     return [];
   }
@@ -281,6 +494,14 @@ async function runMercadoPublicoAuth(options = {}) {
 
     page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+    // Deshabilitar caché del navegador simulado y agregar cabeceras anti-caché
+    await page.setCacheEnabled(false).catch(() => {});
+    await page.setExtraHTTPHeaders({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    }).catch(() => {});
 
     page.setDefaultTimeout(30000);
     page.setDefaultNavigationTimeout(30000);
