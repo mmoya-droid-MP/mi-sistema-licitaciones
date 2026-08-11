@@ -121,9 +121,9 @@ async function fetchOfficialMpDateByCode(itemCode, itemType = '') {
       fechaOficial = licitacion.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || fechas.FechaCierreRecepcionOfertas;
     }
 
-    // Sobreescritura explícita para CM-5802363-9800AAID con fecha real de cierre de cotización (2026-08-04)
+    // Sobreescritura explícita para CM-5802363-9800AAID con fecha Fin de publicación (2026-08-11 16:00:00)
     if (cleanCode.includes('5802363-9800AAID') || String(itemCode).toUpperCase().includes('5802363-9800AAID')) {
-      fechaOficial = '2026-08-04 18:00:00';
+      fechaOficial = '2026-08-11 16:00:00';
     }
 
     // Sobreescritura explícita para 587-32-LE26 con FechaCierreRecepcionOfertas
@@ -344,7 +344,7 @@ async function extractOpportunities(page) {
           finalFechaCierre = apiData.fechaOficial;
         }
 
-        const isExpired = cleanCode.includes('5802363-9800AAID') || (finalFechaCierre && new Date(finalFechaCierre.replace(' ', 'T')).getTime() < Date.now());
+        const isExpired = finalFechaCierre ? new Date(finalFechaCierre.replace(' ', 'T')).getTime() < Date.now() : false;
 
         return {
           ...op,

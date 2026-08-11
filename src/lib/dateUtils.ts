@@ -53,7 +53,7 @@ export function extractFechaCierre(rawItem: any): string {
 
   // 2. Convenio Marco (CM) & Solicitudes de Cotización
   if (isCM || rawItem.Cotizacion) {
-    if (rawId.includes('5802363-9800AAID')) return '2026-08-04 18:00:00';
+    if (rawId.includes('5802363-9800AAID')) return '2026-08-11 16:00:00';
     if (rawItem.FechaFinPublicacion) return String(rawItem.FechaFinPublicacion);
     if (rawItem.FechaCierreCotizacion) return String(rawItem.FechaCierreCotizacion);
     if (rawItem['Plazo límite para la recepción de cotizaciones/ofertas']) return String(rawItem['Plazo límite para la recepción de cotizaciones/ofertas']);
@@ -255,13 +255,14 @@ export function calculateChileRemainingTime(fechaCierreInput: string | Date) {
  */
 export function isItemExpired(item: { fechaCierre?: string; diasRestantes?: number; estado?: string }): boolean {
   if (!item) return false;
-  if (item.estado === 'Cerrada' || item.estado === 'Vencida' || item.estado === 'Cerrado / Vencido' || item.estado === 'Cerrado' || item.estado === 'Desestimada') return true;
-  if (typeof item.diasRestantes === 'number' && item.diasRestantes <= 0) return true;
+  if (item.estado === 'Desestimada') return true;
   const fc = extractFechaCierre(item) || item.fechaCierre;
   if (fc) {
     const timeInfo = calculateChileRemainingTime(fc);
-    if (timeInfo.expirada) return true;
+    return timeInfo.expirada;
   }
+  if (item.estado === 'Cerrada' || item.estado === 'Vencida' || item.estado === 'Cerrado / Vencido' || item.estado === 'Cerrado') return true;
+  if (typeof item.diasRestantes === 'number' && item.diasRestantes < 0) return true;
   return false;
 }
 

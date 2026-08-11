@@ -441,14 +441,14 @@ app.get("/api/licitaciones/external", async (req, res) => {
           }
 
           if (cod.includes('5802363-9800AAID')) {
-            fechaCierreOficial = "2026-08-04 18:00:00";
+            fechaCierreOficial = "2026-08-11 16:00:00";
           }
 
           if (cod === '587-32-LE26' || cod.includes('587-32-LE26')) {
             fechaCierreOficial = item.FechaCierreRecepcionOfertas || fechas.FechaCierreOfertas || "2026-08-31 15:10:00";
           }
 
-          const isExpired = cod.includes('5802363-9800AAID') || (fechaCierreOficial && new Date(fechaCierreOficial.replace(' ', 'T')).getTime() < Date.now());
+          const isExpired = fechaCierreOficial ? new Date(fechaCierreOficial.replace(' ', 'T')).getTime() < Date.now() : false;
 
           return {
             ...item,
