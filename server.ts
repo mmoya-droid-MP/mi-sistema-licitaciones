@@ -372,36 +372,115 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
 
     console.log(`📦 Procesando carga masiva de ${rows.length} registros de compradores...`);
 
-    // Parse and map columns
-    const mappedRows: Array<{ rut_organismo: string; nombre_organismo: string; region: string; ciudad: string }> = [];
+    // Helper function to get first non-empty column value matching keys
+    const getColValue = (r: any, keys: string[]): string => {
+      for (const k of keys) {
+        if (r[k] !== undefined && r[k] !== null) {
+          const val = String(r[k]).trim();
+          if (val) return val;
+        }
+      }
+      return "";
+    };
+
+    // Column Key Mappings for Mercado Público and standard variations
+    const rutKeys = ["RUT", "R.U.T.", "rut", "Rut", "rut_organismo", "RUT Organismo", "Rut Organismo", "RUT ORGANISMO"];
+    const nombreKeys = ["Nombre Institución", "Nombre Institucion", "Razón Social", "Razon Social", "Nombre Organismo", "nombre_organismo", "Organismo", "ORGANISMO", "Nombre", "Organización", "Organizacion"];
+    const regionKeys = ["Región Institución", "Region Institución", "Región Institucion", "Region Institucion", "Región", "Region", "region", "REGION", "Zona"];
+    const ciudadKeys = ["Comuna", "Ciudad", "ciudad", "CIUDAD", "Comuna / Ciudad"];
+
+    const contactNombreKeys = ["Nombre Completo", "Nombre Usuario", "Contacto", "Nombre Contacto", "nombre", "NOMBRE"];
+    const contactCorreoKeys = ["E-Mail Usuario", "EMail Usuario", "Email Usuario", "E-Mail", "Email", "correo", "Correo", "CORREO"];
+    const contactTelefonoKeys = ["Fono Usuario", "Telefono Usuario", "Teléfono Usuario", "Fono", "Teléfono", "Telefono", "telefono", "TELEFONO"];
+    const contactCargoKeys = ["Cargo", "Cargo Usuario", "cargo", "CARGO"];
+
+    // Parse rows & group by RUT to eliminate internal duplicates before batch insertion
+    const buyerMap = new Map<string, {
+      rut_organismo: string;
+      nombre_organismo: string;
+      region: string;
+      ciudad: string;
+      contacts: Array<{ nombre: string; cargo: string; correo: string; telefono: string }>;
+    }>();
 
     for (const r of rows) {
-      const rut = String(r['RUT'] || r['rut'] || r['Rut'] || r['rut_organismo'] || r['RUT Organismo'] || r['Rut Organismo'] || r['RUT ORGANISMO'] || '').trim();
-      const nombre = String(r['Nombre Organismo'] || r['nombre_organismo'] || r['Organismo'] || r['ORGANISMO'] || r['Nombre'] || r['Organización'] || '').trim();
-      const region = String(r['Región'] || r['Region'] || r['region'] || r['REGION'] || r['Zona'] || '').trim();
-      const ciudad = String(r['Ciudad'] || r['ciudad'] || r['CIUDAD'] || r['Comuna'] || r['Comuna / Ciudad'] || '').trim();
+      const rut = getColValue(r, rutKeys);
+      const nombre = getColValue(r, nombreKeys);
+      const region = getColValue(r, regionKeys);
+      const ciudad = getColValue(r, ciudadKeys);
 
-      if (rut && nombre) {
-        mappedRows.push({
+      if (!rut || !nombre) continue;
+
+      const rutUpper = rut.toUpperCase();
+      const nombreUpper = nombre.toUpperCase();
+
+      // Skip duplicate header rows inside the data
+      if (
+        rutUpper === "RUT" || rutUpper === "R.U.T." || rutUpper === "RUT_ORGANISMO" ||
+        nombreUpper === "NOMBRE INSTITUCIÓN" || nombreUpper === "NOMBRE INSTITUCION" ||
+        nombreUpper === "RAZÓN SOCIAL" || nombreUpper === "RAZON SOCIAL" || nombreUpper === "NOMBRE ORGANISMO"
+      ) {
+        continue;
+      }
+
+      // Extract Contact if present
+      const cNombre = getColValue(r, contactNombreKeys);
+      const cCorreo = getColValue(r, contactCorreoKeys);
+      const cTelefono = getColValue(r, contactTelefonoKeys);
+      const cCargo = getColValue(r, contactCargoKeys);
+
+      let contactObj: { nombre: string; cargo: string; correo: string; telefono: string } | null = null;
+      if (cNombre || cCorreo || cTelefono || cCargo) {
+        contactObj = {
+          nombre: cNombre || "Contacto Institucional",
+          cargo: cCargo || "",
+          correo: cCorreo || "",
+          telefono: cTelefono || ""
+        };
+      }
+
+      let existing = buyerMap.get(rut);
+      if (!existing) {
+        existing = {
           rut_organismo: rut,
           nombre_organismo: nombre,
           region: region || "Sin Región",
-          ciudad: ciudad || "Sin Ciudad"
-        });
+          ciudad: ciudad || "Sin Ciudad",
+          contacts: []
+        };
+        buyerMap.set(rut, existing);
+      } else {
+        if (nombre) existing.nombre_organismo = nombre;
+        if (region && region !== "Sin Región") existing.region = region;
+        if (ciudad && ciudad !== "Sin Ciudad") existing.ciudad = ciudad;
+      }
+
+      if (contactObj) {
+        const isDupContact = existing.contacts.some(
+          (c) =>
+            (c.nombre && c.nombre.toLowerCase() === contactObj!.nombre.toLowerCase()) ||
+            (c.correo && contactObj!.correo && c.correo.toLowerCase() === contactObj!.correo.toLowerCase())
+        );
+        if (!isDupContact) {
+          existing.contacts.push(contactObj);
+        }
       }
     }
 
-    if (mappedRows.length === 0) {
-      return res.status(400).json({ success: false, error: "No se encontraron columnas de RUT y Nombre Organismo válidas en el archivo." });
+    const uniqueBuyers = Array.from(buyerMap.values());
+
+    if (uniqueBuyers.length === 0) {
+      return res.status(400).json({ success: false, error: "No se encontraron filas con campos válidos de RUT y Nombre Institución/Razón Social." });
     }
 
     let processedCount = 0;
+    let contactsCount = 0;
     const batchSize = 1000;
 
     if (pool) {
-      // Execute UPSERT in SQL batches of 1,000
-      for (let i = 0; i < mappedRows.length; i += batchSize) {
-        const batch = mappedRows.slice(i, i + batchSize);
+      // Process buyers in SQL UPSERT batches of 1,000
+      for (let i = 0; i < uniqueBuyers.length; i += batchSize) {
+        const batch = uniqueBuyers.slice(i, i + batchSize);
         const valueStrings: string[] = [];
         const queryParams: any[] = [];
 
@@ -418,27 +497,61 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
           DO UPDATE SET 
             nombre_organismo = EXCLUDED.nombre_organismo,
             region = EXCLUDED.region,
-            ciudad = EXCLUDED.ciudad;
+            ciudad = EXCLUDED.ciudad
+          RETURNING id, rut_organismo;
         `;
 
-        await pool.query(sql, queryParams);
+        const result = await pool.query(sql, queryParams);
         processedCount += batch.length;
-        console.log(`✅ Lote de ${batch.length} compradores procesados (Total parcial: ${processedCount}/${mappedRows.length})`);
+
+        // Map returning DB IDs by rut_organismo
+        const rutToId = new Map<string, number>();
+        for (const dbRow of result.rows) {
+          rutToId.set(dbRow.rut_organismo, dbRow.id);
+        }
+
+        // Insert contacts for buyers in this batch
+        const contactValues: string[] = [];
+        const contactParams: any[] = [];
+        let paramIdx = 1;
+
+        for (const b of batch) {
+          const compradorId = rutToId.get(b.rut_organismo);
+          if (compradorId && b.contacts.length > 0) {
+            for (const c of b.contacts) {
+              contactValues.push(`($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4})`);
+              contactParams.push(compradorId, c.nombre, c.cargo, c.correo, c.telefono);
+              paramIdx += 5;
+              contactsCount++;
+            }
+          }
+        }
+
+        if (contactValues.length > 0) {
+          const contactSql = `
+            INSERT INTO contactos_comprador (comprador_id, nombre, cargo, correo, telefono)
+            VALUES ${contactValues.join(", ")};
+          `;
+          await pool.query(contactSql, contactParams);
+        }
+
+        console.log(`✅ Lote de ${batch.length} compradores y ${contactValues.length} contactos procesados en SQL.`);
       }
     } else {
-      // Local fallback UPSERT
+      // Local storage fallback UPSERT
       const currentLocal = readLocalCompradores();
       const localMap = new Map<string, any>();
       currentLocal.forEach((item) => localMap.set(item.rut_organismo, item));
 
-      for (const row of mappedRows) {
-        const existing = localMap.get(row.rut_organismo);
+      for (const row of uniqueBuyers) {
+        let existing = localMap.get(row.rut_organismo);
         if (existing) {
           existing.nombre_organismo = row.nombre_organismo;
           existing.region = row.region;
           existing.ciudad = row.ciudad;
+          if (!existing.contactos) existing.contactos = [];
         } else {
-          const newItem = {
+          existing = {
             id: localMap.size + 1,
             rut_organismo: row.rut_organismo,
             nombre_organismo: row.nombre_organismo,
@@ -447,8 +560,29 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
             contactos: [],
             created_at: new Date().toISOString()
           };
-          localMap.set(row.rut_organismo, newItem);
+          localMap.set(row.rut_organismo, existing);
         }
+
+        for (const c of row.contacts) {
+          const dup = (existing.contactos || []).some(
+            (ec: any) =>
+              (ec.nombre && ec.nombre.toLowerCase() === c.nombre.toLowerCase()) ||
+              (ec.correo && c.correo && ec.correo.toLowerCase() === c.correo.toLowerCase())
+          );
+          if (!dup) {
+            existing.contactos.push({
+              id: Date.now() + Math.floor(Math.random() * 100000),
+              comprador_id: existing.id,
+              nombre: c.nombre,
+              cargo: c.cargo,
+              correo: c.correo,
+              telefono: c.telefono,
+              created_at: new Date().toISOString()
+            });
+            contactsCount++;
+          }
+        }
+
         processedCount++;
       }
 
@@ -457,9 +591,10 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Carga masiva completada exitosamente. Se procesaron e insertaron ${processedCount} registros con UPSERT.`,
+      message: `Carga masiva completada con éxito. Se procesaron e insertaron ${processedCount} organismos compradores y ${contactsCount} contactos asociados en lotes de 1.000.`,
       totalProcessed: processedCount,
-      totalRows: mappedRows.length
+      totalContacts: contactsCount,
+      totalRows: rows.length
     });
   } catch (err: any) {
     console.error("❌ Error en carga masiva /api/compradores/upload:", err);
