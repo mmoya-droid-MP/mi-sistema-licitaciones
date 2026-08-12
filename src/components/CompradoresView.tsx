@@ -136,7 +136,7 @@ export const CompradoresView: React.FC = () => {
     fetchBuyers(page, searchQuery);
   }, [page]);
 
-  // Handle Excel Upload with Client-Side Chunking (500 rows per batch)
+  // Handle Excel/CSV Upload with Client-Side Chunking (500 rows per batch)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -146,14 +146,96 @@ export const CompradoresView: React.FC = () => {
     setUploadProgress(0);
 
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet);
+      let rawRows: any[] = [];
+      const isCsv = file.name.toLowerCase().endsWith('.csv');
+
+      if (isCsv) {
+        // Native CSV parsing line-by-line with delimiter auto-detection and encoding detection
+        const arrayBuffer = await file.arrayBuffer();
+        let text = new TextDecoder('utf-8').decode(arrayBuffer);
+        if (text.includes('')) {
+          text = new TextDecoder('iso-8859-1').decode(arrayBuffer);
+        }
+
+        // Clean BOM if present
+        if (text.charCodeAt(0) === 0xfeff) {
+          text = text.slice(1);
+        }
+
+        const lines = text.split(/\r\n|\n|\r/).filter((l) => l.trim().length > 0);
+
+        if (lines.length >= 2) {
+          // Auto-detect delimiter (, or ; or \t)
+          const headerLine = lines[0];
+          const countSemicolon = (headerLine.match(/;/g) || []).length;
+          const countComma = (headerLine.match(/,/g) || []).length;
+          const countTab = (headerLine.match(/\t/g) || []).length;
+
+          let delimiter = ',';
+          if (countSemicolon >= countComma && countSemicolon >= countTab) {
+            delimiter = ';';
+          } else if (countTab > countComma && countTab > countSemicolon) {
+            delimiter = '\t';
+          }
+
+          const parseCsvLine = (line: string, delim: string): string[] => {
+            const res: string[] = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                  current += '"';
+                  i++;
+                } else {
+                  inQuotes = !inQuotes;
+                }
+              } else if (char === delim && !inQuotes) {
+                res.push(current.trim());
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            res.push(current.trim());
+            return res;
+          };
+
+          const headers = parseCsvLine(lines[0], delimiter).map((h) =>
+            h.replace(/^"+|"+$/g, '').trim()
+          );
+
+          for (let i = 1; i < lines.length; i++) {
+            const values = parseCsvLine(lines[i], delimiter);
+            if (values.length === 0) continue;
+
+            const rowObj: Record<string, string> = {};
+            let hasData = false;
+
+            headers.forEach((header, idx) => {
+              let val = values[idx] || '';
+              val = val.replace(/^"+|"+$/g, '').trim();
+              if (val) hasData = true;
+              rowObj[header] = val;
+            });
+
+            if (hasData) {
+              rawRows.push(rowObj);
+            }
+          }
+        }
+      } else {
+        // Process Excel file using XLSX library
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        rawRows = XLSX.utils.sheet_to_json(worksheet);
+      }
 
       if (!rawRows || rawRows.length === 0) {
-        showToast('El archivo cargado no contiene filas de datos.', 'error');
+        showToast('El archivo cargado no contiene filas de datos válidas.', 'error');
         setIsUploading(false);
         setUploadStatus(null);
         setUploadProgress(null);
@@ -204,8 +286,8 @@ export const CompradoresView: React.FC = () => {
       );
       fetchBuyers(1, searchQuery);
     } catch (err: any) {
-      console.error('Error al subir Excel:', err);
-      showToast(err.message || 'Error de red al procesar el archivo Excel.', 'error');
+      console.error('Error al subir archivo:', err);
+      showToast(err.message || 'Error de red al procesar el archivo.', 'error');
     } finally {
       setIsUploading(false);
       setUploadStatus(null);
@@ -375,14 +457,14 @@ export const CompradoresView: React.FC = () => {
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
               className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-lg transition duration-200 disabled:opacity-50"
-              title="Cargar archivo Excel con compradores en lotes de 1.000"
+              title="Cargar archivo Excel o CSV con compradores en lotes de 500"
             >
               {isUploading ? (
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
               ) : (
                 <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
               )}
-              <span>📥 Cargar Excel Compradores</span>
+              <span>📥 Cargar Excel / CSV</span>
             </button>
 
             <button
