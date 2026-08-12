@@ -350,6 +350,234 @@ function writeLocalCompradores(data: any[]) {
   }
 }
 
+// POST /api/compradores/batch - Recibe lote de hasta 500 objetos JSON e inserta vía UPSERT
+app.post("/api/compradores/batch", async (req, res) => {
+  try {
+    const rows = req.body?.items || req.body?.records || [];
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, error: "No se enviaron registros en el lote." });
+    }
+
+    const getColValue = (r: any, keys: string[]): string => {
+      for (const k of keys) {
+        if (r[k] !== undefined && r[k] !== null) {
+          const val = String(r[k]).trim();
+          if (val) return val;
+        }
+      }
+      return "";
+    };
+
+    const rutKeys = ["RUT", "R.U.T.", "rut", "Rut", "rut_organismo", "RUT Organismo", "Rut Organismo", "RUT ORGANISMO"];
+    const nombreKeys = ["Nombre Institución", "Nombre Institucion", "Razón Social", "Razon Social", "Nombre Organismo", "nombre_organismo", "Organismo", "ORGANISMO", "Nombre", "Organización", "Organizacion"];
+    const regionKeys = ["Región Institución", "Region Institución", "Región Institucion", "Region Institucion", "Región", "Region", "region", "REGION", "Zona"];
+    const ciudadKeys = ["Comuna", "Ciudad", "ciudad", "CIUDAD", "Comuna / Ciudad"];
+
+    const contactNombreKeys = ["Nombre Completo", "Nombre Usuario", "Contacto", "Nombre Contacto", "nombre", "NOMBRE"];
+    const contactCorreoKeys = ["E-Mail Usuario", "EMail Usuario", "Email Usuario", "E-Mail", "Email", "correo", "Correo", "CORREO"];
+    const contactTelefonoKeys = ["Fono Usuario", "Telefono Usuario", "Teléfono Usuario", "Fono", "Teléfono", "Telefono", "telefono", "TELEFONO"];
+    const contactCargoKeys = ["Cargo", "Cargo Usuario", "cargo", "CARGO"];
+
+    // Group items by RUT to handle duplicates within the batch
+    const buyerMap = new Map<string, {
+      rut_organismo: string;
+      nombre_organismo: string;
+      region: string;
+      ciudad: string;
+      contacts: Array<{ nombre: string; cargo: string; correo: string; telefono: string }>;
+    }>();
+
+    for (const r of rows) {
+      const rut = getColValue(r, rutKeys);
+      const nombre = getColValue(r, nombreKeys);
+      const region = getColValue(r, regionKeys);
+      const ciudad = getColValue(r, ciudadKeys);
+
+      if (!rut || !nombre) continue;
+
+      const rutUpper = rut.toUpperCase();
+      const nombreUpper = nombre.toUpperCase();
+
+      if (
+        rutUpper === "RUT" || rutUpper === "R.U.T." || rutUpper === "RUT_ORGANISMO" ||
+        nombreUpper === "NOMBRE INSTITUCIÓN" || nombreUpper === "NOMBRE INSTITUCION" ||
+        nombreUpper === "RAZÓN SOCIAL" || nombreUpper === "RAZON SOCIAL" || nombreUpper === "NOMBRE ORGANISMO"
+      ) {
+        continue;
+      }
+
+      const cNombre = getColValue(r, contactNombreKeys);
+      const cCorreo = getColValue(r, contactCorreoKeys);
+      const cTelefono = getColValue(r, contactTelefonoKeys);
+      const cCargo = getColValue(r, contactCargoKeys);
+
+      let contactObj: { nombre: string; cargo: string; correo: string; telefono: string } | null = null;
+      if (cNombre || cCorreo || cTelefono || cCargo) {
+        contactObj = {
+          nombre: cNombre || "Contacto Institucional",
+          cargo: cCargo || "",
+          correo: cCorreo || "",
+          telefono: cTelefono || ""
+        };
+      }
+
+      let existing = buyerMap.get(rut);
+      if (!existing) {
+        existing = {
+          rut_organismo: rut,
+          nombre_organismo: nombre,
+          region: region || "Sin Región",
+          ciudad: ciudad || "Sin Ciudad",
+          contacts: []
+        };
+        buyerMap.set(rut, existing);
+      } else {
+        if (nombre) existing.nombre_organismo = nombre;
+        if (region && region !== "Sin Región") existing.region = region;
+        if (ciudad && ciudad !== "Sin Ciudad") existing.ciudad = ciudad;
+      }
+
+      if (contactObj) {
+        const isDupContact = existing.contacts.some(
+          (c) =>
+            (c.nombre && c.nombre.toLowerCase() === contactObj!.nombre.toLowerCase()) ||
+            (c.correo && contactObj!.correo && c.correo.toLowerCase() === contactObj!.correo.toLowerCase())
+        );
+        if (!isDupContact) {
+          existing.contacts.push(contactObj);
+        }
+      }
+    }
+
+    const uniqueBuyers = Array.from(buyerMap.values());
+
+    if (uniqueBuyers.length === 0) {
+      return res.json({
+        success: true,
+        message: "Lote procesado sin registros nuevos válidos.",
+        totalProcessed: 0,
+        totalContacts: 0
+      });
+    }
+
+    let processedCount = 0;
+    let contactsCount = 0;
+
+    if (pool) {
+      const valueStrings: string[] = [];
+      const queryParams: any[] = [];
+
+      uniqueBuyers.forEach((row, index) => {
+        const offset = index * 4;
+        valueStrings.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`);
+        queryParams.push(row.rut_organismo, row.nombre_organismo, row.region, row.ciudad);
+      });
+
+      const sql = `
+        INSERT INTO compradores (rut_organismo, nombre_organismo, region, ciudad)
+        VALUES ${valueStrings.join(", ")}
+        ON CONFLICT (rut_organismo) 
+        DO UPDATE SET 
+          nombre_organismo = EXCLUDED.nombre_organismo,
+          region = EXCLUDED.region,
+          ciudad = EXCLUDED.ciudad
+        RETURNING id, rut_organismo;
+      `;
+
+      const result = await pool.query(sql, queryParams);
+      processedCount = result.rowCount || uniqueBuyers.length;
+
+      const rutToId = new Map<string, number>();
+      for (const dbRow of result.rows) {
+        rutToId.set(dbRow.rut_organismo, dbRow.id);
+      }
+
+      const contactValues: string[] = [];
+      const contactParams: any[] = [];
+      let paramIdx = 1;
+
+      for (const b of uniqueBuyers) {
+        const compradorId = rutToId.get(b.rut_organismo);
+        if (compradorId && b.contacts.length > 0) {
+          for (const c of b.contacts) {
+            contactValues.push(`($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4})`);
+            contactParams.push(compradorId, c.nombre, c.cargo, c.correo, c.telefono);
+            paramIdx += 5;
+            contactsCount++;
+          }
+        }
+      }
+
+      if (contactValues.length > 0) {
+        const contactSql = `
+          INSERT INTO contactos_comprador (comprador_id, nombre, cargo, correo, telefono)
+          VALUES ${contactValues.join(", ")};
+        `;
+        await pool.query(contactSql, contactParams);
+      }
+    } else {
+      const currentLocal = readLocalCompradores();
+      const localMap = new Map<string, any>();
+      currentLocal.forEach((item) => localMap.set(item.rut_organismo, item));
+
+      for (const row of uniqueBuyers) {
+        let existing = localMap.get(row.rut_organismo);
+        if (existing) {
+          existing.nombre_organismo = row.nombre_organismo;
+          existing.region = row.region;
+          existing.ciudad = row.ciudad;
+          if (!existing.contactos) existing.contactos = [];
+        } else {
+          existing = {
+            id: localMap.size + 1,
+            rut_organismo: row.rut_organismo,
+            nombre_organismo: row.nombre_organismo,
+            region: row.region,
+            ciudad: row.ciudad,
+            contactos: [],
+            created_at: new Date().toISOString()
+          };
+          localMap.set(row.rut_organismo, existing);
+        }
+
+        for (const c of row.contacts) {
+          const dup = (existing.contactos || []).some(
+            (ec: any) =>
+              (ec.nombre && ec.nombre.toLowerCase() === c.nombre.toLowerCase()) ||
+              (ec.correo && c.correo && ec.correo.toLowerCase() === c.correo.toLowerCase())
+          );
+          if (!dup) {
+            existing.contactos.push({
+              id: Date.now() + Math.floor(Math.random() * 100000),
+              comprador_id: existing.id,
+              nombre: c.nombre,
+              cargo: c.cargo,
+              correo: c.correo,
+              telefono: c.telefono,
+              created_at: new Date().toISOString()
+            });
+            contactsCount++;
+          }
+        }
+        processedCount++;
+      }
+
+      writeLocalCompradores(Array.from(localMap.values()));
+    }
+
+    return res.json({
+      success: true,
+      message: `Lote de ${processedCount} compradores y ${contactsCount} contactos procesado exitosamente.`,
+      totalProcessed: processedCount,
+      totalContacts: contactsCount
+    });
+  } catch (err: any) {
+    console.error("❌ Error en /api/compradores/batch:", err);
+    return res.status(500).json({ success: false, error: "Error interno al procesar el lote: " + err.message });
+  }
+});
+
 // POST /api/compradores/upload - Carga Masiva Excel/CSV en lotes (batching 1.000 rows UPSERT)
 app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
   try {

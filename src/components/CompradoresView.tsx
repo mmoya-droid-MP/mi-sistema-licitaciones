@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Building2,
   Search,
@@ -52,6 +53,7 @@ export const CompradoresView: React.FC = () => {
   // Uploading state
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modals state
@@ -134,37 +136,80 @@ export const CompradoresView: React.FC = () => {
     fetchBuyers(page, searchQuery);
   }, [page]);
 
-  // Handle Excel Upload
+  // Handle Excel Upload with Client-Side Chunking (500 rows per batch)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus(`Cargando archivo ${file.name} (Procesando lotes de 500 filas)...`);
+    setUploadStatus(`Leyendo archivo ${file.name}...`);
+    setUploadProgress(0);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-      const res = await fetch('/api/compradores/upload', {
-        method: 'POST',
-        body: formData
-      });
-
-      const json = await res.json();
-
-      if (json.success) {
-        showToast(json.message || 'Carga masiva completada con éxito.');
-        fetchBuyers(1, searchQuery);
-      } else {
-        showToast(json.error || 'Error al procesar el archivo Excel.', 'error');
+      if (!rawRows || rawRows.length === 0) {
+        showToast('El archivo cargado no contiene filas de datos.', 'error');
+        setIsUploading(false);
+        setUploadStatus(null);
+        setUploadProgress(null);
+        return;
       }
+
+      const totalRows = rawRows.length;
+      const batchSize = 500;
+      const totalBatches = Math.ceil(totalRows / batchSize);
+
+      let totalProcessedCompradores = 0;
+      let totalContactsInserted = 0;
+
+      for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+        const currentBatchNumber = batchIdx + 1;
+        const start = batchIdx * batchSize;
+        const end = Math.min(start + batchSize, totalRows);
+        const batchItems = rawRows.slice(start, end);
+
+        const pct = Math.round((currentBatchNumber / totalBatches) * 100);
+        setUploadProgress(pct);
+        setUploadStatus(
+          `Procesando lote ${currentBatchNumber} de ${totalBatches}... (${pct}% completado)`
+        );
+
+        const res = await fetch('/api/compradores/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: batchItems })
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error || `Error HTTP ${res.status} al procesar el lote ${currentBatchNumber}`);
+        }
+
+        const json = await res.json();
+        if (!json.success) {
+          throw new Error(json.error || `Error en servidor al procesar lote ${currentBatchNumber}`);
+        }
+
+        totalProcessedCompradores += json.totalProcessed || 0;
+        totalContactsInserted += json.totalContacts || 0;
+      }
+
+      showToast(
+        `Carga completada con éxito. Se procesaron ${totalProcessedCompradores} compradores y ${totalContactsInserted} contactos.`
+      );
+      fetchBuyers(1, searchQuery);
     } catch (err: any) {
       console.error('Error al subir Excel:', err);
-      showToast('Error de red al cargar el archivo Excel.', 'error');
+      showToast(err.message || 'Error de red al procesar el archivo Excel.', 'error');
     } finally {
       setIsUploading(false);
       setUploadStatus(null);
+      setUploadProgress(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -350,11 +395,28 @@ export const CompradoresView: React.FC = () => {
           </div>
         </div>
 
-        {/* Upload status indicator */}
+        {/* Upload status indicator with Progress Bar */}
         {uploadStatus && (
-          <div className="mt-4 bg-emerald-950/80 border border-emerald-500/40 text-emerald-200 text-xs px-4 py-2.5 rounded-xl flex items-center space-x-2 animate-pulse">
-            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            <span>{uploadStatus}</span>
+          <div className="mt-4 bg-slate-900 border border-emerald-500/40 text-emerald-200 text-xs p-3.5 rounded-xl space-y-2.5 shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-400 shrink-0" />
+                <span className="font-semibold text-emerald-100">{uploadStatus}</span>
+              </div>
+              {uploadProgress !== null && (
+                <span className="font-mono font-bold text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded border border-emerald-700/50">
+                  {uploadProgress}%
+                </span>
+              )}
+            </div>
+            {uploadProgress !== null && (
+              <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700">
+                <div
+                  className="bg-emerald-500 h-2.5 rounded-full transition-all duration-300 ease-out shadow-xs"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
