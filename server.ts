@@ -475,12 +475,13 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
 
     let processedCount = 0;
     let contactsCount = 0;
-    const batchSize = 1000;
+    const batchSize = 500;
 
     if (pool) {
-      // Process buyers in SQL UPSERT batches of 1,000
-      for (let i = 0; i < uniqueBuyers.length; i += batchSize) {
-        const batch = uniqueBuyers.slice(i, i + batchSize);
+      // Helper function to process a single batch of up to 500 buyers + contacts
+      const processBatch = async (batch: typeof uniqueBuyers) => {
+        if (!pool) return { buyersProcessed: 0, contactsInserted: 0 };
+
         const valueStrings: string[] = [];
         const queryParams: any[] = [];
 
@@ -502,7 +503,6 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
         `;
 
         const result = await pool.query(sql, queryParams);
-        processedCount += batch.length;
 
         // Map returning DB IDs by rut_organismo
         const rutToId = new Map<string, number>();
@@ -514,6 +514,7 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
         const contactValues: string[] = [];
         const contactParams: any[] = [];
         let paramIdx = 1;
+        let cCount = 0;
 
         for (const b of batch) {
           const compradorId = rutToId.get(b.rut_organismo);
@@ -522,7 +523,7 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
               contactValues.push(`($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4})`);
               contactParams.push(compradorId, c.nombre, c.cargo, c.correo, c.telefono);
               paramIdx += 5;
-              contactsCount++;
+              cCount++;
             }
           }
         }
@@ -535,7 +536,25 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
           await pool.query(contactSql, contactParams);
         }
 
-        console.log(`✅ Lote de ${batch.length} compradores y ${contactValues.length} contactos procesados en SQL.`);
+        return { buyersProcessed: batch.length, contactsInserted: cCount };
+      };
+
+      // Split uniqueBuyers into 500-item batches
+      const batches: (typeof uniqueBuyers)[] = [];
+      for (let i = 0; i < uniqueBuyers.length; i += batchSize) {
+        batches.push(uniqueBuyers.slice(i, i + batchSize));
+      }
+
+      // Execute batches in concurrent parallel chunks using Promise.all to avoid HTTP timeout
+      const concurrentChunkSize = 5; // Process 5 batches of 500 (2,500 rows) concurrently
+      for (let i = 0; i < batches.length; i += concurrentChunkSize) {
+        const chunk = batches.slice(i, i + concurrentChunkSize);
+        const results = await Promise.all(chunk.map((b) => processBatch(b)));
+        for (const resItem of results) {
+          processedCount += resItem.buyersProcessed;
+          contactsCount += resItem.contactsInserted;
+        }
+        console.log(`⚡ Lote concurrente completado (${processedCount}/${uniqueBuyers.length} compradores procesación)`);
       }
     } else {
       // Local storage fallback UPSERT
@@ -591,7 +610,7 @@ app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Carga masiva completada con éxito. Se procesaron e insertaron ${processedCount} organismos compradores y ${contactsCount} contactos asociados en lotes de 1.000.`,
+      message: `Carga masiva completada con éxito. Se procesaron e insertaron ${processedCount} organismos compradores y ${contactsCount} contactos asociados en lotes de 500.`,
       totalProcessed: processedCount,
       totalContacts: contactsCount,
       totalRows: rows.length

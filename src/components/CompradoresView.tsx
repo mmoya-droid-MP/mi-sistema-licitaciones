@@ -140,7 +140,7 @@ export const CompradoresView: React.FC = () => {
     if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus(`Cargando archivo ${file.name} (Procesando lotes de 1.000 filas)...`);
+    setUploadStatus(`Cargando archivo ${file.name} (Procesando lotes de 500 filas)...`);
 
     try {
       const formData = new FormData();
