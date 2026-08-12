@@ -659,7 +659,7 @@ async function runMercadoPublicoAuth(options = {}) {
   }
 }
 
-if (typeof require !== 'undefined' && require.main === module) {
+if (require.main === module) {
   runMercadoPublicoAuth();
 }
 
