@@ -9,12 +9,13 @@ import {
   Settings,
   Sparkles,
   Share2,
-  ShieldCheck
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 import { AlertaNotificacion } from '../types';
 
 interface HeaderProps {
-  activeTab: 'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'alertas' | 'alerts';
+  activeTab: 'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts';
   setActiveTab: (tab: any) => void;
   notificaciones: AlertaNotificacion[];
   setNotificaciones?: React.Dispatch<React.SetStateAction<AlertaNotificacion[]>>;
@@ -129,6 +130,18 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              onClick={() => setActiveTab('compradores')}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'compradores'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Building2 className="w-4 h-4 text-cyan-400" />
+              <span>Directorio Compradores</span>
+            </button>
+
+            <button
               onClick={handleAlertsClick}
               className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'alertas'
@@ -145,27 +158,6 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
           </nav>
-
-          {/* Quick Actions */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={openReportsModal}
-              className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-              title="Exportar Reportes PDF / Word / Excel"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span className="hidden lg:inline">Exportar Reportes</span>
-            </button>
-
-            <button
-              onClick={openShareModal}
-              className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-              title="Compartir Licitaciones"
-            >
-              <Share2 className="w-4 h-4 text-cyan-400" />
-              <span className="hidden lg:inline">Compartir</span>
-            </button>
-          </div>
         </div>
       </div>
 

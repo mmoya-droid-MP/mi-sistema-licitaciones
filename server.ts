@@ -4,13 +4,84 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import pg from "pg";
+import multer from "multer";
+import * as XLSX from "xlsx";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+
+// ==========================================
+// SUPABASE / POSTGRESQL DATABASE CONNECTION
+// ==========================================
+const { Pool } = pg;
+let pool: pg.Pool | null = null;
+
+if (process.env.DATABASE_URL) {
+  try {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false }
+    });
+    console.log("🐘 Conectado exitosamente a la base de datos PostgreSQL en Supabase.");
+  } catch (err) {
+    console.error("❌ Error inicializando pool de PostgreSQL:", err);
+  }
+} else {
+  console.log("ℹ️ DATABASE_URL no configurada. Se utilizará persistencia en almacenamiento local para Directorio de Compradores.");
+}
+
+// Automatic Schema Migration on startup
+async function initDatabaseSchema() {
+  if (!pool) return;
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS compradores (
+          id SERIAL PRIMARY KEY,
+          rut_organismo VARCHAR(20) UNIQUE NOT NULL,
+          nombre_organismo VARCHAR(255) NOT NULL,
+          region VARCHAR(100),
+          ciudad VARCHAR(100),
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_compradores_rut ON compradores(rut_organismo);
+        CREATE INDEX IF NOT EXISTS idx_compradores_nombre ON compradores(nombre_organismo);
+        CREATE INDEX IF NOT EXISTS idx_compradores_region ON compradores(region);
+        CREATE INDEX IF NOT EXISTS idx_compradores_ciudad ON compradores(ciudad);
+
+        CREATE TABLE IF NOT EXISTS contactos_comprador (
+          id SERIAL PRIMARY KEY,
+          comprador_id INT REFERENCES compradores(id) ON DELETE CASCADE,
+          nombre VARCHAR(255) NOT NULL,
+          cargo VARCHAR(255),
+          correo VARCHAR(255),
+          telefono VARCHAR(50),
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      console.log("✅ Tablas 'compradores' y 'contactos_comprador' verificadas/creadas automáticamente en Supabase.");
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("❌ Error ejecutando migración de esquema en Supabase:", err);
+  }
+}
+
+initDatabaseSchema();
 
 // File path for global configuration persistence
 const CONFIG_FILE = path.join(process.cwd(), "config.json");
@@ -107,6 +178,566 @@ app.post("/api/settings/ticket", (req, res) => {
     writeConfig({ ticket: currentMpTicket });
   }
   res.json({ success: true, ticket: currentMpTicket });
+});
+
+// Persistence for Mis Postulaciones
+const POSTULACIONES_FILE = path.join(process.cwd(), "postulaciones.json");
+
+function readPostulaciones() {
+  if (fs.existsSync(POSTULACIONES_FILE)) {
+    try {
+      const raw = fs.readFileSync(POSTULACIONES_FILE, "utf-8");
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("⚠️ Error leyendo postulaciones.json");
+    }
+  }
+  return [];
+}
+
+function writePostulaciones(data: any[]) {
+  try {
+    fs.writeFileSync(POSTULACIONES_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error("❌ Error guardando postulaciones.json:", e);
+  }
+}
+
+app.get("/api/postulaciones", (_req, res) => {
+  res.json(readPostulaciones());
+});
+
+app.post("/api/postulaciones", (req, res) => {
+  try {
+    const { id, codigo, licitacion, aiAnalysis, analisisIA } = req.body || {};
+    const targetId = id || codigo || licitacion?.codigo || "S/I";
+    const analysisData = aiAnalysis || analisisIA || null;
+
+    console.log(`📌 Guardando postulación ID ${targetId} en la base de datos...`);
+
+    const currentList = readPostulaciones();
+    
+    // Check if already exists, update or insert
+    const existingIndex = currentList.findIndex((p: any) => p.codigo === targetId || p.id === targetId || p.licitacionId === targetId);
+
+    const newPostulacion = {
+      id: existingIndex >= 0 ? currentList[existingIndex].id : `post-${Date.now()}`,
+      licitacionId: targetId,
+      codigo: targetId,
+      licitacionNombre: licitacion?.nombre || "Licitación / Cotización",
+      cliente: licitacion?.cliente || "Mercado Público",
+      tipo: licitacion?.tipo || "Licitación",
+      url: licitacion?.url || "",
+      montoOfertaClp: licitacion?.montoEstimadoClp || 0,
+      estadoPostulacion: existingIndex >= 0 ? currentList[existingIndex].estadoPostulacion : "Preparando",
+      responsable: "Equipo Licitaciones",
+      fechaCierreOriginal: licitacion?.fechaCierre || "",
+      fechaLimiteInterna: licitacion?.fechaCierre || "",
+      notas: "Guardado desde Evaluación IA Gemini",
+      aiAnalysis: analysisData,
+      analisisIA: analysisData,
+      createdAt: existingIndex >= 0 ? currentList[existingIndex].createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (existingIndex >= 0) {
+      currentList[existingIndex] = newPostulacion;
+    } else {
+      currentList.unshift(newPostulacion);
+    }
+
+    writePostulaciones(currentList);
+
+    return res.json({
+      success: true,
+      message: "Añadido a Mis Postulaciones correctamente",
+      id: targetId,
+      postulacion: newPostulacion
+    });
+  } catch (err: any) {
+    console.error("Error al guardar postulación:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Error al guardar en la base de datos."
+    });
+  }
+});
+
+// ==========================================
+// DIRECTORIO DE COMPRADORES & CONTACTOS API
+// ==========================================
+const COMPRADORES_FILE = path.join(process.cwd(), "compradores.json");
+
+const SEED_COMPRADORES = [
+  {
+    id: 1,
+    rut_organismo: "60.511.000-7",
+    nombre_organismo: "Carabineros de Chile - Dirección de Logística",
+    region: "Región Metropolitana de Santiago",
+    ciudad: "Santiago",
+    contactos: [
+      { id: 101, comprador_id: 1, nombre: "Capitán Jorge Morales", cargo: "Jefe de Adquisiciones y Licitaciones", correo: "jmorales@carabineros.cl", telefono: "+56 2 2922 4000" },
+      { id: 102, comprador_id: 1, nombre: "Andrea Fuentealba", cargo: "Analista de Mercado Público", correo: "afuentealba@carabineros.cl", telefono: "+56 2 2922 4015" }
+    ],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    rut_organismo: "61.101.000-K",
+    nombre_organismo: "Hospital San José - Servicio de Salud Metropolitano Norte",
+    region: "Región Metropolitana de Santiago",
+    ciudad: "Independencia",
+    contactos: [
+      { id: 103, comprador_id: 2, nombre: "Dr. Roberto Silva", cargo: "Subdirector de Gestión de Suministros", correo: "rsilva@hospitalsanjose.cl", telefono: "+56 2 2384 5000" }
+    ],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    rut_organismo: "69.070.300-9",
+    nombre_organismo: "Ilustre Municipalidad de Santiago",
+    region: "Región Metropolitana de Santiago",
+    ciudad: "Santiago",
+    contactos: [
+      { id: 104, comprador_id: 3, nombre: "Marcelo Contreras", cargo: "Encargado de Compras Públicas", correo: "mcontreras@munistgo.cl", telefono: "+56 2 2713 6000" }
+    ],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 4,
+    rut_organismo: "61.200.000-8",
+    nombre_organismo: "Fuerza Aérea de Chile - Comando Logístico",
+    region: "Región Metropolitana de Santiago",
+    ciudad: "Cerrillos",
+    contactos: [],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 5,
+    rut_organismo: "61.302.000-2",
+    nombre_organismo: "Ministerio de Obras Públicas - Dirección de Vialidad",
+    region: "Región de Valparaíso",
+    ciudad: "Valparaíso",
+    contactos: [
+      { id: 105, comprador_id: 5, nombre: "Loreto Araya", cargo: "Jefa de Proyectos Licitados", correo: "loreto.araya@mop.gov.cl", telefono: "+56 32 226 1000" }
+    ],
+    created_at: new Date().toISOString()
+  }
+];
+
+function readLocalCompradores(): any[] {
+  if (fs.existsSync(COMPRADORES_FILE)) {
+    try {
+      const raw = fs.readFileSync(COMPRADORES_FILE, "utf-8");
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("⚠️ Error leyendo compradores.json");
+    }
+  }
+  try {
+    fs.writeFileSync(COMPRADORES_FILE, JSON.stringify(SEED_COMPRADORES, null, 2), "utf-8");
+  } catch (e) {
+    // ignore
+  }
+  return [...SEED_COMPRADORES];
+}
+
+function writeLocalCompradores(data: any[]) {
+  try {
+    fs.writeFileSync(COMPRADORES_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error("❌ Error guardando compradores.json:", e);
+  }
+}
+
+// POST /api/compradores/upload - Carga Masiva Excel/CSV en lotes (batching 1.000 rows UPSERT)
+app.post("/api/compradores/upload", upload.single("file"), async (req, res) => {
+  try {
+    let rows: any[] = [];
+
+    if (req.file) {
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      rows = XLSX.utils.sheet_to_json(worksheet);
+    } else if (Array.isArray(req.body?.records)) {
+      rows = req.body.records;
+    } else {
+      return res.status(400).json({ success: false, error: "No se proporcionó ningún archivo Excel/CSV o arreglo de registros." });
+    }
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ success: false, error: "El archivo cargado no contiene filas de datos." });
+    }
+
+    console.log(`📦 Procesando carga masiva de ${rows.length} registros de compradores...`);
+
+    // Parse and map columns
+    const mappedRows: Array<{ rut_organismo: string; nombre_organismo: string; region: string; ciudad: string }> = [];
+
+    for (const r of rows) {
+      const rut = String(r['RUT'] || r['rut'] || r['Rut'] || r['rut_organismo'] || r['RUT Organismo'] || r['Rut Organismo'] || r['RUT ORGANISMO'] || '').trim();
+      const nombre = String(r['Nombre Organismo'] || r['nombre_organismo'] || r['Organismo'] || r['ORGANISMO'] || r['Nombre'] || r['Organización'] || '').trim();
+      const region = String(r['Región'] || r['Region'] || r['region'] || r['REGION'] || r['Zona'] || '').trim();
+      const ciudad = String(r['Ciudad'] || r['ciudad'] || r['CIUDAD'] || r['Comuna'] || r['Comuna / Ciudad'] || '').trim();
+
+      if (rut && nombre) {
+        mappedRows.push({
+          rut_organismo: rut,
+          nombre_organismo: nombre,
+          region: region || "Sin Región",
+          ciudad: ciudad || "Sin Ciudad"
+        });
+      }
+    }
+
+    if (mappedRows.length === 0) {
+      return res.status(400).json({ success: false, error: "No se encontraron columnas de RUT y Nombre Organismo válidas en el archivo." });
+    }
+
+    let processedCount = 0;
+    const batchSize = 1000;
+
+    if (pool) {
+      // Execute UPSERT in SQL batches of 1,000
+      for (let i = 0; i < mappedRows.length; i += batchSize) {
+        const batch = mappedRows.slice(i, i + batchSize);
+        const valueStrings: string[] = [];
+        const queryParams: any[] = [];
+
+        batch.forEach((row, index) => {
+          const offset = index * 4;
+          valueStrings.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`);
+          queryParams.push(row.rut_organismo, row.nombre_organismo, row.region, row.ciudad);
+        });
+
+        const sql = `
+          INSERT INTO compradores (rut_organismo, nombre_organismo, region, ciudad)
+          VALUES ${valueStrings.join(", ")}
+          ON CONFLICT (rut_organismo) 
+          DO UPDATE SET 
+            nombre_organismo = EXCLUDED.nombre_organismo,
+            region = EXCLUDED.region,
+            ciudad = EXCLUDED.ciudad;
+        `;
+
+        await pool.query(sql, queryParams);
+        processedCount += batch.length;
+        console.log(`✅ Lote de ${batch.length} compradores procesados (Total parcial: ${processedCount}/${mappedRows.length})`);
+      }
+    } else {
+      // Local fallback UPSERT
+      const currentLocal = readLocalCompradores();
+      const localMap = new Map<string, any>();
+      currentLocal.forEach((item) => localMap.set(item.rut_organismo, item));
+
+      for (const row of mappedRows) {
+        const existing = localMap.get(row.rut_organismo);
+        if (existing) {
+          existing.nombre_organismo = row.nombre_organismo;
+          existing.region = row.region;
+          existing.ciudad = row.ciudad;
+        } else {
+          const newItem = {
+            id: localMap.size + 1,
+            rut_organismo: row.rut_organismo,
+            nombre_organismo: row.nombre_organismo,
+            region: row.region,
+            ciudad: row.ciudad,
+            contactos: [],
+            created_at: new Date().toISOString()
+          };
+          localMap.set(row.rut_organismo, newItem);
+        }
+        processedCount++;
+      }
+
+      writeLocalCompradores(Array.from(localMap.values()));
+    }
+
+    return res.json({
+      success: true,
+      message: `Carga masiva completada exitosamente. Se procesaron e insertaron ${processedCount} registros con UPSERT.`,
+      totalProcessed: processedCount,
+      totalRows: mappedRows.length
+    });
+  } catch (err: any) {
+    console.error("❌ Error en carga masiva /api/compradores/upload:", err);
+    return res.status(500).json({ success: false, error: err.message || "Error al procesar la carga masiva del archivo Excel." });
+  }
+});
+
+// GET /api/compradores - Consulta Paginada (20 por página) + Buscador Onebox (RUT, Nombre, Región, Ciudad)
+app.get("/api/compradores", async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit || "20"), 10)));
+    const q = String(req.query.q || req.query.search || "").trim();
+    const offset = (page - 1) * limit;
+
+    if (pool) {
+      let countQuery = `SELECT COUNT(*) FROM compradores`;
+      let dataQuery = `SELECT id, rut_organismo, nombre_organismo, region, ciudad, created_at FROM compradores`;
+      const queryParams: any[] = [];
+
+      if (q) {
+        const whereClause = ` WHERE LOWER(rut_organismo) LIKE $1 OR LOWER(nombre_organismo) LIKE $1 OR LOWER(region) LIKE $1 OR LOWER(ciudad) LIKE $1`;
+        countQuery += whereClause;
+        dataQuery += whereClause;
+        queryParams.push(`%${q.toLowerCase()}%`);
+      }
+
+      const countResult = await pool.query(countQuery, queryParams);
+      const totalCount = parseInt(countResult.rows[0].count, 10);
+
+      dataQuery += ` ORDER BY id DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+      const dataParams = [...queryParams, limit, offset];
+      const dataResult = await pool.query(dataQuery, dataParams);
+
+      const buyers = dataResult.rows;
+
+      // Attach contacts for retrieved buyers
+      if (buyers.length > 0) {
+        const buyerIds = buyers.map((b) => b.id);
+        const contactsResult = await pool.query(
+          `SELECT id, comprador_id, nombre, cargo, correo, telefono, created_at FROM contactos_comprador WHERE comprador_id = ANY($1) ORDER BY id ASC`,
+          [buyerIds]
+        );
+
+        const contactsMap = new Map<number, any[]>();
+        contactsResult.rows.forEach((c) => {
+          if (!contactsMap.has(c.comprador_id)) {
+            contactsMap.set(c.comprador_id, []);
+          }
+          contactsMap.get(c.comprador_id)!.push(c);
+        });
+
+        buyers.forEach((b) => {
+          b.contactos = contactsMap.get(b.id) || [];
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: buyers,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages: Math.ceil(totalCount / limit) || 1
+        }
+      });
+    } else {
+      // Local file implementation
+      let localList = readLocalCompradores();
+
+      if (q) {
+        const qLow = q.toLowerCase();
+        localList = localList.filter((b) =>
+          (b.rut_organismo && b.rut_organismo.toLowerCase().includes(qLow)) ||
+          (b.nombre_organismo && b.nombre_organismo.toLowerCase().includes(qLow)) ||
+          (b.region && b.region.toLowerCase().includes(qLow)) ||
+          (b.ciudad && b.ciudad.toLowerCase().includes(qLow))
+        );
+      }
+
+      const totalCount = localList.length;
+      const paginatedList = localList.slice(offset, offset + limit);
+
+      return res.json({
+        success: true,
+        data: paginatedList,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages: Math.ceil(totalCount / limit) || 1
+        }
+      });
+    }
+  } catch (err: any) {
+    console.error("❌ Error al obtener compradores:", err);
+    return res.status(500).json({ success: false, error: err.message || "Error al consultar directorio de compradores." });
+  }
+});
+
+// POST /api/compradores - Agregar Comprador Manualmente
+app.post("/api/compradores", async (req, res) => {
+  try {
+    const { rut_organismo, nombre_organismo, region, ciudad } = req.body || {};
+
+    if (!rut_organismo || !nombre_organismo) {
+      return res.status(400).json({ success: false, error: "El RUT y Nombre de la organización son obligatorios." });
+    }
+
+    const cleanRut = String(rut_organismo).trim();
+    const cleanNombre = String(nombre_organismo).trim();
+    const cleanRegion = String(region || "Sin Región").trim();
+    const cleanCiudad = String(ciudad || "Sin Ciudad").trim();
+
+    if (pool) {
+      const sql = `
+        INSERT INTO compradores (rut_organismo, nombre_organismo, region, ciudad)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (rut_organismo)
+        DO UPDATE SET nombre_organismo = EXCLUDED.nombre_organismo, region = EXCLUDED.region, ciudad = EXCLUDED.ciudad
+        RETURNING *;
+      `;
+      const result = await pool.query(sql, [cleanRut, cleanNombre, cleanRegion, cleanCiudad]);
+      const created = result.rows[0];
+      created.contactos = [];
+
+      return res.json({ success: true, message: "Comprador registrado exitosamente.", data: created });
+    } else {
+      const currentLocal = readLocalCompradores();
+      const existingIdx = currentLocal.findIndex((b) => b.rut_organismo === cleanRut);
+
+      let created: any;
+      if (existingIdx >= 0) {
+        currentLocal[existingIdx].nombre_organismo = cleanNombre;
+        currentLocal[existingIdx].region = cleanRegion;
+        currentLocal[existingIdx].ciudad = cleanCiudad;
+        created = currentLocal[existingIdx];
+      } else {
+        created = {
+          id: Date.now(),
+          rut_organismo: cleanRut,
+          nombre_organismo: cleanNombre,
+          region: cleanRegion,
+          ciudad: cleanCiudad,
+          contactos: [],
+          created_at: new Date().toISOString()
+        };
+        currentLocal.unshift(created);
+      }
+
+      writeLocalCompradores(currentLocal);
+      return res.json({ success: true, message: "Comprador registrado exitosamente.", data: created });
+    }
+  } catch (err: any) {
+    console.error("❌ Error al guardar comprador:", err);
+    return res.status(500).json({ success: false, error: err.message || "Error al registrar comprador." });
+  }
+});
+
+// POST /api/compradores/:id/contactos - Agregar un nuevo contacto
+app.post("/api/compradores/:id/contactos", async (req, res) => {
+  try {
+    const compradorId = parseInt(req.params.id, 10);
+    const { nombre, cargo, correo, telefono } = req.body || {};
+
+    if (!nombre) {
+      return res.status(400).json({ success: false, error: "El nombre del contacto es obligatorio." });
+    }
+
+    if (pool) {
+      const sql = `
+        INSERT INTO contactos_comprador (comprador_id, nombre, cargo, correo, telefono)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *;
+      `;
+      const result = await pool.query(sql, [
+        compradorId,
+        String(nombre).trim(),
+        String(cargo || "").trim(),
+        String(correo || "").trim(),
+        String(telefono || "").trim()
+      ]);
+
+      return res.json({
+        success: true,
+        message: "Contacto agregado exitosamente.",
+        data: result.rows[0]
+      });
+    } else {
+      const currentLocal = readLocalCompradores();
+      const buyer = currentLocal.find((b) => String(b.id) === String(compradorId));
+
+      if (!buyer) {
+        return res.status(404).json({ success: false, error: "Comprador no encontrado." });
+      }
+
+      if (!Array.isArray(buyer.contactos)) {
+        buyer.contactos = [];
+      }
+
+      const newContact = {
+        id: Date.now(),
+        comprador_id: compradorId,
+        nombre: String(nombre).trim(),
+        cargo: String(cargo || "").trim(),
+        correo: String(correo || "").trim(),
+        telefono: String(telefono || "").trim(),
+        created_at: new Date().toISOString()
+      };
+
+      buyer.contactos.push(newContact);
+      writeLocalCompradores(currentLocal);
+
+      return res.json({
+        success: true,
+        message: "Contacto agregado exitosamente.",
+        data: newContact
+      });
+    }
+  } catch (err: any) {
+    console.error("❌ Error al agregar contacto:", err);
+    return res.status(500).json({ success: false, error: err.message || "Error al agregar contacto." });
+  }
+});
+
+// DELETE /api/contactos/:id - Eliminar contacto específico
+app.delete("/api/contactos/:id", async (req, res) => {
+  try {
+    const contactId = parseInt(req.params.id, 10);
+
+    if (pool) {
+      await pool.query(`DELETE FROM contactos_comprador WHERE id = $1`, [contactId]);
+      return res.json({ success: true, message: "Contacto eliminado exitosamente." });
+    } else {
+      const currentLocal = readLocalCompradores();
+      let found = false;
+
+      currentLocal.forEach((b) => {
+        if (Array.isArray(b.contactos)) {
+          const initialLen = b.contactos.length;
+          b.contactos = b.contactos.filter((c: any) => String(c.id) !== String(contactId));
+          if (b.contactos.length < initialLen) {
+            found = true;
+          }
+        }
+      });
+
+      if (found) {
+        writeLocalCompradores(currentLocal);
+      }
+
+      return res.json({ success: true, message: "Contacto eliminado exitosamente." });
+    }
+  } catch (err: any) {
+    console.error("❌ Error al eliminar contacto:", err);
+    return res.status(500).json({ success: false, error: err.message || "Error al eliminar contacto." });
+  }
+});
+
+// DELETE /api/compradores/:id - Eliminar comprador y contactos asociados
+app.delete("/api/compradores/:id", async (req, res) => {
+  try {
+    const buyerId = parseInt(req.params.id, 10);
+
+    if (pool) {
+      await pool.query(`DELETE FROM compradores WHERE id = $1`, [buyerId]);
+      return res.json({ success: true, message: "Comprador eliminado exitosamente." });
+    } else {
+      let currentLocal = readLocalCompradores();
+      currentLocal = currentLocal.filter((b) => String(b.id) !== String(buyerId));
+      writeLocalCompradores(currentLocal);
+      return res.json({ success: true, message: "Comprador eliminado exitosamente." });
+    }
+  } catch (err: any) {
+    console.error("❌ Error al eliminar comprador:", err);
+    return res.status(500).json({ success: false, error: err.message || "Error al eliminar comprador." });
+  }
 });
 
 // Helper for dynamic score calculation

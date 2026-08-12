@@ -5,6 +5,7 @@ import { LicitacionesRadarView } from './components/LicitacionesRadarView';
 import { PostulacionesPipelineView } from './components/PostulacionesPipelineView';
 import { CalendarView } from './components/CalendarView';
 import { AlertsView } from './components/AlertsView';
+import { CompradoresView } from './components/CompradoresView';
 import { AIEvaluatorModal } from './components/AIEvaluatorModal';
 import { ShareModal } from './components/ShareModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -21,7 +22,7 @@ import {
 import { LicitacionItem, Postulacion, AlertaRule, AlertaNotificacion, OrdenCompraItem } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'alertas' | 'alerts'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts'>('dashboard');
 
   const [licitaciones, setLicitaciones] = useState<LicitacionItem[]>(INITIAL_LICITACIONES);
   const [postulaciones, setPostulaciones] = useState<Postulacion[]>(INITIAL_POSTULACIONES);
@@ -150,6 +151,10 @@ export default function App() {
           <CalendarView postulaciones={postulaciones} />
         )}
 
+        {activeTab === 'compradores' && (
+          <CompradoresView />
+        )}
+
         {(activeTab === 'alerts' || activeTab === 'alertas') && (
           <AlertsView
             alertas={alertas}
@@ -163,6 +168,27 @@ export default function App() {
         <AIEvaluatorModal
           item={aiEvaluatorItem}
           onClose={() => setAiEvaluatorItem(null)}
+          onAddPostulacion={(item) => {
+            const newPostulacion: Postulacion = {
+              id: `post-${Date.now()}`,
+              codigoLicitacion: item.codigo,
+              licitacionNombre: item.nombre,
+              cliente: item.cliente,
+              tipo: item.tipo,
+              url: item.url,
+              montoOfertaClp: item.montoEstimadoClp,
+              estadoPostulacion: 'Preparando',
+              responsable: 'Equipo Licitaciones',
+              fechaCierreOriginal: item.fechaCierre,
+              fechaLimiteInterna: item.fechaCierre,
+              notas: 'Añadido desde Evaluación IA Gemini',
+              checklist: [],
+              historial: [],
+              updatedAt: new Date().toISOString()
+            };
+            setPostulaciones((prev) => [newPostulacion, ...prev]);
+            setActiveTab('postulaciones');
+          }}
         />
       )}
 

@@ -23,6 +23,8 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
   onAddPostulacion
 }) => {
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [toastSuccess, setToastSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<GeminiAnalysisResult | null>(null);
 
@@ -68,8 +70,62 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
     };
   }, [item]);
 
+  const handleAddPostulacion = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload = {
+        id: item.codigo || (item as any).id,
+        codigo: item.codigo,
+        licitacion: item,
+        aiAnalysis: {
+          requisitos: analysis?.requisitosClave || (analysis as any)?.requisitos || [],
+          riesgos: analysis?.riesgosDetectados || (analysis as any)?.riesgos || [],
+          recomendaciones: analysis?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || [],
+          perfiles: analysis?.perfilesRequeridos || [],
+          matchScore: analysis?.matchScore,
+          resumenEjecutivo: analysis?.resumenEjecutivo
+        }
+      };
+
+      const response = await fetch('/api/postulaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo registrar la postulación en el servidor.');
+      }
+
+      setToastSuccess('Añadido a Mis Postulaciones correctamente');
+
+      if (onAddPostulacion) {
+        onAddPostulacion(item);
+      }
+
+      setTimeout(() => {
+        onClose();
+      }, 1100);
+    } catch (err: any) {
+      console.error('Error guardando postulación:', err);
+      setError(err.message || 'Error al conectar con la base de datos de postulaciones.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      {/* Toast Notification Alert */}
+      {toastSuccess && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white font-bold text-sm px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-2.5 animate-bounce border border-emerald-400">
+          <CheckCircle2 className="w-5 h-5 text-white" />
+          <span>{toastSuccess}</span>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 relative max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between border-b pb-4">
@@ -89,7 +145,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
             <p className="text-xs font-semibold text-slate-500">{item.cliente}</p>
           </div>
 
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={onClose} disabled={submitting} className="text-slate-400 hover:text-slate-600 p-1">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -205,20 +261,28 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
         <div className="flex items-center justify-between pt-4 border-t">
           <button
             onClick={onClose}
-            className="text-xs font-semibold text-slate-600 hover:text-slate-800 px-4 py-2"
+            disabled={submitting}
+            className="text-xs font-semibold text-slate-600 hover:text-slate-800 px-4 py-2 disabled:opacity-50"
           >
             Cerrar
           </button>
 
           <button
-            onClick={() => {
-              onAddPostulacion(item);
-              onClose();
-            }}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition"
+            onClick={handleAddPostulacion}
+            disabled={submitting || loading}
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus className="w-4 h-4" />
-            <span>Añadir a Mis Postulaciones</span>
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>Añadir a Mis Postulaciones</span>
+              </>
+            )}
           </button>
         </div>
       </div>
