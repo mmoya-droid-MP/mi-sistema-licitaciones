@@ -659,7 +659,7 @@ async function runMercadoPublicoAuth(options = {}) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (typeof require !== 'undefined' && require.main === module) {
   runMercadoPublicoAuth();
 }
 
