@@ -464,7 +464,7 @@ export const CompradoresView: React.FC = () => {
               ) : (
                 <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
               )}
-              <span>📥 Cargar Excel / CSV</span>
+              <span>📊 Cargar Excel Masivo</span>
             </button>
 
             <button
@@ -503,9 +503,9 @@ export const CompradoresView: React.FC = () => {
         )}
       </div>
 
-      {/* Onebox Smart Search Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-        <div className="relative">
+      {/* Onebox Smart Search Bar & Green Cargar Excel Masivo Button */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative flex-1 w-full">
           <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -523,6 +523,20 @@ export const CompradoresView: React.FC = () => {
             </button>
           )}
         </div>
+
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-4 py-3 rounded-xl shadow-md transition duration-200 shrink-0 w-full sm:w-auto justify-center disabled:opacity-50"
+          title="Cargar archivo Excel o CSV con compradores en lotes de 500"
+        >
+          {isUploading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-white" />
+          ) : (
+            <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+          )}
+          <span>📊 Cargar Excel Masivo</span>
+        </button>
       </div>
 
       {/* Results Table */}

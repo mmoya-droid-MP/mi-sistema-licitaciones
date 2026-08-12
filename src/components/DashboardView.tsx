@@ -10,12 +10,11 @@ import {
   ChevronRight,
   Plus,
   FileText,
+  FileSpreadsheet,
   AlertCircle,
   Share2,
   CheckCircle2,
   Zap,
-  ShieldCheck,
-  Key,
   Table,
   ChevronDown,
   ChevronUp,
@@ -48,12 +47,11 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   licitaciones,
   postulaciones,
+  setActiveTab,
   onSelectLicitacionAI,
   onAddPostulacion,
   onNavigateToRadar,
   openReportsModal,
-  openShareModal,
-  openAuthModal,
   onAddAlerta
 }) => {
   const [tableSearch, setTableSearch] = useState('');
@@ -114,28 +112,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {openAuthModal && (
-              <button
-                onClick={openAuthModal}
-                className="flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg transition transform active:scale-95"
-              >
-                <ShieldCheck className="w-4 h-4 text-cyan-200" />
-                <span>Conectar ClaveÚnica</span>
-              </button>
-            )}
             <button
               onClick={openReportsModal}
               className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg transition transform active:scale-95"
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4 text-blue-200" />
               <span>Exportar Reportes</span>
             </button>
+
             <button
-              onClick={() => onNavigateToRadar(false)}
-              className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl border border-cyan-500/30 transition"
+              onClick={() => {
+                if (setActiveTab) {
+                  setActiveTab('compradores');
+                } else if (onNavigateToRadar) {
+                  onNavigateToRadar(false);
+                }
+              }}
+              className="flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg transition transform active:scale-95"
             >
-              <Clock className="w-4 h-4 text-cyan-400" />
-              <span>Radar de Oportunidades</span>
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>Cargar CSV / Excel</span>
             </button>
           </div>
         </div>

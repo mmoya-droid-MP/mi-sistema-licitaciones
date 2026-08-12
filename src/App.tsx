@@ -102,6 +102,7 @@ export default function App() {
             licitaciones={licitaciones}
             radarFilter7Days={radarFilter7Days}
             setRadarFilter7Days={setRadarFilter7Days}
+            setActiveTab={setActiveTab}
             openAiEvaluator={(item) => setAiEvaluatorItem(item)}
             onSelectLicitacionAI={(item) => setAiEvaluatorItem(item)}
             onAddPostulacion={(item) => {

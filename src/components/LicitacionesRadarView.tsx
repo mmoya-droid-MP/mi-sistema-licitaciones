@@ -17,7 +17,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Bell,
-  AlertCircle
+  AlertCircle,
+  FileSpreadsheet
 } from 'lucide-react';
 import { LicitacionItem, TipoProceso, AlertaRule, SET_PALABRAS_CLAVE_MASTER } from '../types';
 import { openGoogleCalendar } from '../lib/googleCalendar';
@@ -36,6 +37,7 @@ interface LicitacionesRadarViewProps {
   onShareItem?: (item: LicitacionItem) => void;
   onAddAlerta?: (alerta: AlertaRule) => void;
   initial7DaysFilter?: boolean;
+  setActiveTab?: (tab: any) => void;
 }
 
 const PRESET_KEYWORDS = SET_PALABRAS_CLAVE_MASTER;
@@ -47,7 +49,8 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
   onAddPostulacion,
   onShareItem,
   onAddAlerta,
-  initial7DaysFilter = false
+  initial7DaysFilter = false,
+  setActiveTab
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTipo, setSelectedTipo] = useState<TipoProceso | 'TODOS'>('TODOS');
@@ -160,29 +163,44 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
       {/* Search Header & Filter Box */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="relative w-full max-w-md">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-              🔍
-            </span>
-            <input
-              type="text"
-              placeholder="Buscar por código, palabra clave, tecnología o cliente..."
-              onChange={(e) => {
-                const value = e.target.value;
-                if ((window as any).searchTimeout) clearTimeout((window as any).searchTimeout);
-                (window as any).searchTimeout = setTimeout(() => {
-                  setSearchTerm(value);
-                }, 300);
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-2xl">
+            <div className="relative w-full flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                🔍
+              </span>
+              <input
+                type="text"
+                placeholder="Buscar por código, palabra clave, tecnología o cliente..."
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if ((window as any).searchTimeout) clearTimeout((window as any).searchTimeout);
+                  (window as any).searchTimeout = setTimeout(() => {
+                    setSearchTerm(value);
+                  }, 300);
+                }}
+                style={{
+                  color: '#0f172a',
+                  backgroundColor: '#ffffff',
+                  caretColor: '#0f172a',
+                  WebkitTextFillColor: '#0f172a',
+                  opacity: 1
+                }}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                if (setActiveTab) {
+                  setActiveTab('compradores');
+                }
               }}
-              style={{
-                color: '#0f172a',
-                backgroundColor: '#ffffff',
-                caretColor: '#0f172a',
-                WebkitTextFillColor: '#0f172a',
-                opacity: 1
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
-            />
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition shrink-0 w-full sm:w-auto justify-center"
+              title="Ir a Cargar Excel Masivo de Compradores"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>📊 Cargar Excel Masivo</span>
+            </button>
           </div>
 
           <div className="flex items-center space-x-2 w-full md:w-auto justify-end">
