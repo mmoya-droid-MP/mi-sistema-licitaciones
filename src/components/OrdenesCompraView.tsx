@@ -208,15 +208,15 @@ export const OrdenesCompraView: React.FC<OrdenesCompraViewProps> = ({
 
       <div className="space-y-3">
         <div className="flex justify-between items-center text-xs text-slate-400 px-1">
-          <span>Se encontraron {filteredOCs.length} registros</span>
+          <span>Se encontraron {(filteredOCs || []).length} registros</span>
         </div>
 
-        {filteredOCs.length === 0 ? (
+        {(filteredOCs || []).length === 0 ? (
           <div className="text-center py-10 border border-dashed border-slate-800 rounded-lg text-slate-500 text-sm">
             No se encontraron órdenes de compra con los términos o fechas ingresadas.
           </div>
         ) : (
-          filteredOCs.map((oc) => (
+          (filteredOCs || []).map((oc) => (
             <div
               key={oc.id}
               className="p-4 bg-slate-800/40 border border-slate-700/60 hover:border-slate-600 rounded-lg transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"

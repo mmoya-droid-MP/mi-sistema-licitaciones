@@ -94,20 +94,33 @@ export const CompradoresView: React.FC = () => {
       });
 
       const res = await fetch(`/api/compradores?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(`Error en servidor (${res.status})`);
+      }
       const json = await res.json();
 
-      if (json.success) {
+      if (json && json.success && Array.isArray(json.data)) {
         setBuyers(json.data || []);
         if (json.pagination) {
-          setPage(json.pagination.page);
-          setTotalPages(json.pagination.totalPages);
-          setTotalCount(json.pagination.totalCount);
+          setPage(json.pagination.page || 1);
+          setTotalPages(json.pagination.totalPages || 1);
+          setTotalCount(json.pagination.totalCount || 0);
+        } else {
+          setPage(1);
+          setTotalPages(1);
+          setTotalCount((json.data || []).length);
         }
       } else {
-        console.error('Error cargando compradores:', json.error);
+        console.error('Error cargando compradores:', json?.error);
+        setBuyers([]);
+        setTotalPages(1);
+        setTotalCount(0);
       }
     } catch (err) {
       console.error('Error de red al obtener compradores:', err);
+      setBuyers([]);
+      setTotalPages(1);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -375,13 +388,37 @@ export const CompradoresView: React.FC = () => {
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
             <p className="text-sm font-medium">Consultando directorio de compradores...</p>
           </div>
-        ) : buyers.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 space-y-3">
-            <Building className="w-12 h-12 mx-auto text-slate-300" />
-            <h3 className="text-base font-bold text-slate-700">No se encontraron compradores</h3>
-            <p className="text-xs text-slate-400">
-              Intenta con otro término en el Onebox o carga nuevos registros desde el botón "📥 Cargar Excel Compradores".
-            </p>
+        ) : (buyers || []).length === 0 ? (
+          <div className="p-12 text-center text-slate-500 space-y-4 max-w-lg mx-auto">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+              <Building2 className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-800">
+                {searchQuery ? 'Sin resultados para la búsqueda' : 'Directorio de Compradores Vacío'}
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                {searchQuery
+                  ? `No se encontraron organismos que coincidan con "${searchQuery}". Intenta con otro término o limpia el buscador.`
+                  : 'La base de datos no contiene compradores actualmente. Puedes agregar compradores manualmente o importar una lista en Excel.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setShowAddBuyerModal(true)}
+                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>➕ Agregar Primer Comprador</span>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+                <span>📥 Cargar Excel Masivo</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -395,7 +432,7 @@ export const CompradoresView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {buyers.map((buyer) => (
+                {(buyers || []).map((buyer) => (
                   <tr key={buyer.id} className="hover:bg-slate-50/80 transition duration-150">
                     {/* Buyer Organismo & RUT */}
                     <td className="py-4 px-4 align-top max-w-xs">
@@ -424,9 +461,9 @@ export const CompradoresView: React.FC = () => {
 
                     {/* Contactos Asociados */}
                     <td className="py-4 px-4 align-top">
-                      {buyer.contactos && buyer.contactos.length > 0 ? (
+                      {(buyer.contactos || []).length > 0 ? (
                         <div className="space-y-2">
-                          {buyer.contactos.map((contacto) => (
+                          {(buyer.contactos || []).map((contacto) => (
                             <div
                               key={contacto.id}
                               className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-start justify-between gap-2 group hover:border-blue-300 transition"

@@ -94,16 +94,16 @@ export const AlertsView: React.FC<AlertsViewProps> = ({
         <div className="lg:col-span-2 space-y-4">
           <h3 className="font-bold text-slate-900 text-base flex items-center justify-between">
             <span>Reglas de Alerta Activas</span>
-            <span className="text-xs text-slate-500 font-normal">{alertas.length} configuradas</span>
+            <span className="text-xs text-slate-500 font-normal">{(alertas || []).length} configuradas</span>
           </h3>
 
           <div className="space-y-3">
-            {alertas.length === 0 ? (
+            {(alertas || []).length === 0 ? (
               <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
                 No tienes reglas de alertas creadas. Haz clic en "Nueva Alerta Personalizada" para monitorear licitaciones por palabra clave o monto.
               </div>
             ) : (
-              alertas.map((rule) => (
+              (alertas || []).map((rule) => (
                 <div
                   key={rule.id}
                   className={`bg-white rounded-2xl border p-5 shadow-xs transition flex flex-col justify-between space-y-3 ${
@@ -214,12 +214,12 @@ export const AlertsView: React.FC<AlertsViewProps> = ({
           </div>
 
           <div className="space-y-3">
-            {notificaciones.length === 0 ? (
+            {(notificaciones || []).length === 0 ? (
               <p className="text-xs text-slate-400 italic py-6 text-center">
                 Sin notificaciones pendientes.
               </p>
             ) : (
-              notificaciones.map((n) => (
+              (notificaciones || []).map((n) => (
                 <div
                   key={n.id}
                   onClick={() => onMarkNotifRead(n.id)}

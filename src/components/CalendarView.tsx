@@ -71,8 +71,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const eventsByDay = useMemo(() => {
     const map: Record<number, { title: string; code: string; type: string; dateStr: string; item: any; updated?: boolean; isOC?: boolean }[]> = {};
 
+    const safeLicitaciones = licitaciones || [];
+    const safePostulaciones = postulaciones || [];
+    const safeOrdenes = ordenesCompra || [];
+
     if (filterMode === 'ordenes') {
-      ordenesCompra.forEach((oc) => {
+      safeOrdenes.forEach((oc) => {
         try {
           const dateStr = oc.fechaEnvio || oc.fechaCreacion;
           const d = new Date(dateStr);
@@ -99,11 +103,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       });
     } else {
       const itemsToProcess = filterMode === 'postulaciones'
-        ? licitaciones.filter((l) => postulaciones.some((p) => p.codigoLicitacion === l.codigo))
-        : licitaciones;
+        ? safeLicitaciones.filter((l) => safePostulaciones.some((p) => p && p.codigoLicitacion === l.codigo))
+        : safeLicitaciones;
 
       itemsToProcess.forEach((item) => {
         try {
+          if (!item) return;
           const fc = extractFechaCierre(item) || item.fechaCierre;
           const d = new Date(fc);
           if (!isNaN(d.getTime()) && d.getFullYear() === selectedYear && d.getMonth() === selectedMonth) {
@@ -157,7 +162,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 filterMode === 'all' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-600'
               }`}
             >
-              Todas las Oportunidades ({licitaciones.length})
+              Todas las Oportunidades ({(licitaciones || []).length})
             </button>
             <button
               onClick={() => setFilterMode('postulaciones')}

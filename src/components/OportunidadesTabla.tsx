@@ -118,7 +118,7 @@ export const OportunidadesTabla: React.FC<Props> = ({
           />
         </div>
         <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>
-          {filteredData.length} de {dataList.length}
+          {(filteredData || []).length} de {(dataList || []).length}
         </span>
       </div>
 
@@ -145,12 +145,12 @@ export const OportunidadesTabla: React.FC<Props> = ({
 
         {/* FILAS DE DATOS */}
         <div style={{ fontSize: '13px' }}>
-          {filteredData.length === 0 ? (
+          {(filteredData || []).length === 0 ? (
             <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '14px', backgroundColor: '#0f172a' }}>
               {searchTerm ? `No se encontraron resultados para "${searchTerm}"` : 'No se encontraron oportunidades registradas.'}
             </div>
           ) : (
-            filteredData.map((item) => (
+            (filteredData || []).map((item) => (
               <div
                 key={item.id || Math.random()}
                 className="grid grid-cols-[140px_220px_220px_130px_auto] items-center gap-2"

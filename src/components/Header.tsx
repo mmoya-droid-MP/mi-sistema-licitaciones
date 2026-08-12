@@ -36,7 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   openShareModal,
   openAuthModal
 }) => {
-  const unreadCount = notificaciones.filter((n) => !n.leida).length;
+  const unreadCount = (notificaciones || []).filter((n) => n && !n.leida).length;
 
   const handleAlertsClick = () => {
     setActiveTab('alertas');

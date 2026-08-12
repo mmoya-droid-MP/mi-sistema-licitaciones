@@ -43,13 +43,15 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
 }) => {
   const [selectedPost, setSelectedPost] = useState<Postulacion | null>(null);
 
+  const safePostulaciones = postulaciones || [];
+
   // Toggle checklist item
   const toggleChecklist = (post: Postulacion, checkId: string) => {
-    const updatedChecklist = post.checklist.map((c) =>
+    const updatedChecklist = (post.checklist || []).map((c) =>
       c.id === checkId ? { ...c, completed: !c.completed } : c
     );
     const updatedPost = { ...post, checklist: updatedChecklist, updatedAt: new Date().toISOString() };
-    onUpdatePostulacion(updatedPost);
+    if (onUpdatePostulacion) onUpdatePostulacion(updatedPost);
     if (selectedPost && selectedPost.id === post.id) {
       setSelectedPost(updatedPost);
     }
@@ -58,7 +60,7 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
   // Change stage
   const moveStage = (post: Postulacion, nextStage: EstadoPostulacion) => {
     const newHistorial = [
-      ...post.historial,
+      ...(post.historial || []),
       {
         id: `h-${Date.now()}`,
         fecha: new Date().toLocaleString('es-CL'),
@@ -72,7 +74,7 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
       historial: newHistorial,
       updatedAt: new Date().toISOString()
     };
-    onUpdatePostulacion(updatedPost);
+    if (onUpdatePostulacion) onUpdatePostulacion(updatedPost);
     if (selectedPost && selectedPost.id === post.id) {
       setSelectedPost(updatedPost);
     }
@@ -94,7 +96,7 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
 
         <div className="flex items-center space-x-3 text-xs">
           <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl font-bold border border-blue-200">
-            Total en Cartera: {postulaciones.length}
+            Total en Cartera: {(safePostulaciones || []).length}
           </span>
         </div>
       </div>
@@ -102,7 +104,7 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
       {/* Kanban Board Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
         {STAGES.filter(s => s.id !== 'Desestimada').map((stage) => {
-          const stagePosts = postulaciones.filter((p) => p.estadoPostulacion === stage.id);
+          const stagePosts = (safePostulaciones || []).filter((p) => p && p.estadoPostulacion === stage.id);
 
           return (
             <div
@@ -115,20 +117,20 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
                   {stage.title}
                 </span>
                 <span className="text-xs font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded border">
-                  {stagePosts.length}
+                  {(stagePosts || []).length}
                 </span>
               </div>
 
               {/* Cards in Column */}
               <div className="space-y-3 flex-1">
-                {stagePosts.length === 0 ? (
+                {(stagePosts || []).length === 0 ? (
                   <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400">
                     Arrastra o asigna licitaciones aquí
                   </div>
                 ) : (
                   stagePosts.map((post) => {
-                    const completedCount = post.checklist.filter((c) => c.completed).length;
-                    const totalCheck = post.checklist.length;
+                    const completedCount = (post.checklist || []).filter((c) => c?.completed).length;
+                    const totalCheck = (post.checklist || []).length;
 
                     return (
                       <div
@@ -288,12 +290,12 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
               <h4 className="font-bold text-slate-900 text-sm flex items-center justify-between">
                 <span>Checklist de Documentos Requeridos</span>
                 <span className="text-xs font-normal text-slate-500">
-                  {selectedPost.checklist.filter((c) => c.completed).length}/{selectedPost.checklist.length} listos
+                  {(selectedPost.checklist || []).filter((c) => c?.completed).length}/{(selectedPost.checklist || []).length} listos
                 </span>
               </h4>
 
               <div className="space-y-2">
-                {selectedPost.checklist.map((c) => (
+                {(selectedPost.checklist || []).map((c) => (
                   <div
                     key={c.id}
                     onClick={() => toggleChecklist(selectedPost, c.id)}
@@ -317,11 +319,11 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
               <label className="text-xs font-bold text-slate-700">Notas de Estrategia y Observaciones</label>
               <textarea
                 rows={3}
-                value={selectedPost.notas}
+                value={selectedPost.notas || ''}
                 onChange={(e) => {
                   const updated = { ...selectedPost, notas: e.target.value };
                   setSelectedPost(updated);
-                  onUpdatePostulacion(updated);
+                  if (onUpdatePostulacion) onUpdatePostulacion(updated);
                 }}
                 className="w-full text-xs p-3 border rounded-xl bg-slate-50 focus:bg-white"
                 placeholder="Ingresa detalles sobre precios, competidores, anexos..."
@@ -335,7 +337,7 @@ export const PostulacionesPipelineView: React.FC<PostulacionesPipelineViewProps>
                 <span>Historial de Actualizaciones de la Postulación</span>
               </h4>
               <div className="space-y-1.5 max-h-32 overflow-y-auto text-xs">
-                {selectedPost.historial.map((h) => (
+                {(selectedPost.historial || []).map((h) => (
                   <div key={h.id} className="p-2 bg-slate-100 rounded text-slate-700">
                     <span className="font-bold text-slate-900">{h.fecha}: </span>
                     <strong className="text-blue-700">{h.titulo}</strong> - {h.detalle}

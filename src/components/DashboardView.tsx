@@ -62,19 +62,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [alertModalItem, setAlertModalItem] = useState<LicitacionItem | null>(null);
 
+  const safeLicitaciones = useMemo(() => licitaciones || [], [licitaciones]);
+  const safePostulaciones = useMemo(() => postulaciones || [], [postulaciones]);
+
   // Compute Stats dynamically with isItemExpired
-  const activas = useMemo(() => licitaciones.filter((item) => !isItemExpired(item)), [licitaciones]);
-  const vencidas = useMemo(() => licitaciones.filter((item) => isItemExpired(item)), [licitaciones]);
+  const activas = useMemo(() => safeLicitaciones.filter((item) => item && !isItemExpired(item)), [safeLicitaciones]);
+  const vencidas = useMemo(() => safeLicitaciones.filter((item) => item && isItemExpired(item)), [safeLicitaciones]);
 
-  const ultimos7Dias = useMemo(() => activas.filter((item) => item.esUltimos7Dias), [activas]);
-  const urgentes = useMemo(() => activas.filter((item) => item.diasRestantes <= 3 && item.diasRestantes >= 0), [activas]);
-  const postulacionesEnCurso = useMemo(() => postulaciones.filter((p) => p.estadoPostulacion !== 'Adjudicada' && p.estadoPostulacion !== 'Desestimada'), [postulaciones]);
+  const ultimos7Dias = useMemo(() => activas.filter((item) => item?.esUltimos7Dias), [activas]);
+  const urgentes = useMemo(() => activas.filter((item) => (item?.diasRestantes ?? 99) <= 3 && (item?.diasRestantes ?? -1) >= 0), [activas]);
+  const postulacionesEnCurso = useMemo(() => safePostulaciones.filter((p) => p && p.estadoPostulacion !== 'Adjudicada' && p.estadoPostulacion !== 'Desestimada'), [safePostulaciones]);
 
-  const montoTotalLicitado = useMemo(() => activas.reduce((acc, curr) => acc + (curr.montoEstimadoClp || 0), 0), [activas]);
+  const montoTotalLicitado = useMemo(() => activas.reduce((acc, curr) => acc + (curr?.montoEstimadoClp || 0), 0), [activas]);
 
   // Filter table items by tableStatus
   const filteredTableItems = useMemo(() => {
-    return licitaciones.filter((item) => {
+    return safeLicitaciones.filter((item) => {
+      if (!item) return false;
       const expired = isItemExpired(item);
       if (tableStatus === 'ACTIVAS' && expired) return false;
       if (tableStatus === 'VENCIDAS' && !expired) return false;
@@ -87,7 +91,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
       return true;
     });
-  }, [licitaciones, tableStatus, tableSearch, tableTipo]);
+  }, [safeLicitaciones, tableStatus, tableSearch, tableTipo]);
 
   return (
     <div className="space-y-8 pb-12">

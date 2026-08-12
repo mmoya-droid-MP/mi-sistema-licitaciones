@@ -65,12 +65,15 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
     );
   };
 
+  const safeLicitaciones = useMemo(() => licitaciones || [], [licitaciones]);
+
   // Real Counts
-  const activasCount = useMemo(() => licitaciones.filter((item) => !isItemExpired(item)).length, [licitaciones]);
-  const vencidasCount = useMemo(() => licitaciones.filter((item) => isItemExpired(item)).length, [licitaciones]);
+  const activasCount = useMemo(() => safeLicitaciones.filter((item) => item && !isItemExpired(item)).length, [safeLicitaciones]);
+  const vencidasCount = useMemo(() => safeLicitaciones.filter((item) => item && isItemExpired(item)).length, [safeLicitaciones]);
 
   const filteredLicitaciones = useMemo(() => {
-    return licitaciones.filter((item) => {
+    return safeLicitaciones.filter((item) => {
+      if (!item) return false;
       const expired = isItemExpired(item);
 
       // Status Filter: ACTIVAS, VENCIDAS, TODAS
@@ -95,18 +98,18 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
       if (selectedRange === '7DIAS' && !item.esUltimos7Dias) {
         return false;
       }
-      if (selectedRange === 'URGENTES' && (expired || item.diasRestantes > 3)) {
+      if (selectedRange === 'URGENTES' && (expired || (item.diasRestantes ?? 99) > 3)) {
         return false;
       }
 
       // Tags filter
-      if (selectedTags.length > 0 && !matchesAllTagsDeep(item, selectedTags)) {
+      if ((selectedTags || []).length > 0 && !matchesAllTagsDeep(item, selectedTags)) {
         return false;
       }
 
       return true;
     });
-  }, [licitaciones, selectedStatus, searchTerm, selectedTipo, selectedRange, selectedTags]);
+  }, [safeLicitaciones, selectedStatus, searchTerm, selectedTipo, selectedRange, selectedTags]);
 
   return (
     <div className="space-y-6 pb-12">
