@@ -49,15 +49,66 @@ export default function App() {
           const json = await res.json();
           const rawItems = Array.isArray(json) ? json : (json.data || json.opportunities || []);
           if (Array.isArray(rawItems) && rawItems.length > 0) {
-            const mappedLicitaciones: LicitacionItem[] = rawItems.map((opp: any) => {
-              const code = opp.code || opp.id || 'S/I';
-              const name = opp.title || opp.name || 'Orden de Compra Mercado Público';
-              const typeRaw = String(opp.type || opp.tipo || '').toLowerCase();
-              const codeUpper = String(code).toUpperCase();
-              const nameUpper = String(name).toUpperCase();
+            const mappedLicitaciones: LicitacionItem[] = rawItems
+              .map((opp: any): LicitacionItem | null => {
+              const cleanStr = (v: any) => (v === undefined || v === null ? '' : String(v).replace(/[\r\n]+/g, ' ').trim());
+
+              // ID: row['ID COTIZACIÓN'] || row['id_cotizacion'] || row['numero_de_la_orden_de_compra']
+              const code = cleanStr(
+                opp['ID COTIZACIÓN'] || opp['ID COTIZACION'] || opp.id_cotizacion || opp.ID_COTIZACION ||
+                opp.code || opp.id || opp.numero_de_la_orden_de_compra || opp.numero_orden_compra
+              );
+
+              // Nombre: row['NOMBRE DE COTIZACIÓN'] || row['nombre_de_cotizacion'] || row['nombre_de_la_orden_de_compra']
+              const name = cleanStr(
+                opp['NOMBRE DE COTIZACIÓN'] || opp['NOMBRE DE COTIZACION'] || opp.nombre_de_cotizacion || opp.NOMBRE_DE_COTIZACION ||
+                opp.title || opp.name || opp.nombre_de_la_orden_de_compra || opp.nombre_orden_compra
+              );
+
+              // REGLA ESTRICTA: Desechar filas sin ID o Nombre válido
+              if (!code || !name) {
+                return null;
+              }
+
+              // Organismo: row['ORGANIZACIÓN'] || row['organizacion'] || row['razon_social'] || row['unidad_de_compra']
+              const buyer = cleanStr(
+                opp['ORGANIZACIÓN'] || opp['ORGANIZACION'] || opp.organizacion || opp.ORGANIZACION_COMPRADORA ||
+                opp.buyer || opp.organism || opp.institution || opp.razon_social || opp.unidad_de_compra
+              ) || 'Organismo Comprador';
+
+              // Contacto: row['NOMBRE DEL COMPRADOR'] || row['nombre_completo']
+              const contact = cleanStr(
+                opp['NOMBRE DEL COMPRADOR'] || opp['NOMBRE_DEL_COMPRADOR'] || opp.nombre_del_comprador ||
+                opp.contactName || opp.nombre_completo
+              );
+
+              // Presupuesto/Monto: row['PRESUPUESTO MÁXIMO'] || row['total_oc']
+              const rawAmount = opp['PRESUPUESTO MÁXIMO'] !== undefined ? opp['PRESUPUESTO MÁXIMO']
+                : (opp['PRESUPUESTO MAXIMO'] !== undefined ? opp['PRESUPUESTO MAXIMO']
+                  : (opp.presupuesto_maximo !== undefined ? opp.presupuesto_maximo
+                    : (opp.amount !== undefined ? opp.amount : (opp.total_oc !== undefined ? opp.total_oc : opp.neto_clp || 0))));
+
+              const amountParsed = typeof rawAmount === 'number'
+                ? rawAmount
+                : parseFloat(cleanStr(rawAmount).replace(/[^0-9.-]+/g, '')) || 0;
+
+              // Fecha Cierre: row['FIN DE PUBLICACIÓN'] || row['fecha_cierre']
+              const rawClosure = cleanStr(
+                opp['FIN DE PUBLICACIÓN'] || opp['FIN DE PUBLICACION'] || opp.fin_de_publicacion ||
+                opp.closingDate || opp.endDate || opp.fecha_cierre || opp.fechaCierre
+              );
+              const isFuture = rawClosure && !isNaN(new Date(rawClosure).getTime()) && new Date(rawClosure).getTime() > Date.now();
+              const validClosureDate = isFuture
+                ? new Date(rawClosure).toISOString()
+                : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+              const hasIdCotizacion = Boolean(opp['ID COTIZACIÓN'] || opp['ID COTIZACION'] || opp.id_cotizacion || opp.ID_COTIZACION);
+              const typeRaw = cleanStr(opp.type || opp.tipo).toLowerCase();
+              const codeUpper = code.toUpperCase();
+              const nameUpper = name.toUpperCase();
 
               let inferredTipo: TipoProceso = 'Licitacion';
-              if (typeRaw.includes('convenio') || typeRaw.includes('marco') || codeUpper.startsWith('CM-') || nameUpper.includes('CONVENIO MARCO')) {
+              if (hasIdCotizacion || typeRaw.includes('convenio') || typeRaw.includes('marco') || codeUpper.startsWith('CM-') || codeUpper.includes('AISP') || nameUpper.includes('CONVENIO MARCO')) {
                 inferredTipo = 'Convenio Marco';
               } else if (typeRaw.includes('agil') || typeRaw.includes('cot') || codeUpper.includes('-COT') || nameUpper.includes('COMPRA AGIL') || nameUpper.includes('COMPRA ÁGIL')) {
                 inferredTipo = 'Compra Agil';
@@ -65,29 +116,28 @@ export default function App() {
                 inferredTipo = 'Licitacion';
               }
 
-              const rawClosure = opp.closingDate || opp.endDate;
-              const isFuture = rawClosure && new Date(rawClosure).getTime() > Date.now();
-              const validClosureDate = isFuture
-                ? rawClosure
-                : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+              const contactEmail = cleanStr(opp.contactEmail || opp.e_mail_usuario);
+              const contactPhone = cleanStr(opp.contactPhone || opp.fono_usuario);
+              const contactRole = cleanStr(opp.contactRole || opp.cargo);
+              const location = cleanStr(opp.location || opp.comuna) || 'Región Metropolitana de Santiago';
 
               return {
                 codigo: code,
-                cliente: opp.buyer || opp.organism || opp.institution || 'Organismo Comprador',
+                cliente: buyer,
                 nombre: name,
-                descripcion: `Organismo: ${opp.organism || opp.buyer || ''} | Unidad: ${opp.institution || ''} | Contacto: ${opp.contactName || ''} (${opp.contactRole || ''}) - Email: ${opp.contactEmail || ''} - Tel: ${opp.contactPhone || ''} - Comuna: ${opp.location || ''}`,
+                descripcion: `Organismo: ${buyer}${contact ? ' | Contacto: ' + contact : ''}${contactRole ? ' (' + contactRole + ')' : ''}${contactEmail ? ' - Email: ' + contactEmail : ''}${contactPhone ? ' - Tel: ' + contactPhone : ''}${location ? ' - Comuna: ' + location : ''}`,
                 tipo: inferredTipo,
-                montoEstimadoClp: opp.amount || 0,
+                montoEstimadoClp: amountParsed,
                 fechaPublicacion: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
                 fechaCierre: validClosureDate,
                 diasRestantes: 15,
                 estado: 'Publicada',
                 url: `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${code}`,
                 esUltimos7Dias: true,
-                tags: ['Mercado Público', opp.location].filter(Boolean) as string[],
-                region: opp.location || 'Región Metropolitana de Santiago'
+                tags: ['Mercado Público', location].filter(Boolean) as string[],
+                region: location
               };
-            });
+            }).filter((item): item is LicitacionItem => item !== null);
 
             // Combinar con INITIAL_LICITACIONES manteniendo las 3 modalidades completas
             setLicitaciones((prev) => {

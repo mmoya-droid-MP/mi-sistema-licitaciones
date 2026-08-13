@@ -270,6 +270,18 @@ const OPPORTUNITIES_FILE = path.join(process.cwd(), "opportunities.json");
 
 const SEED_OPPORTUNITIES = [
   {
+    "ID COTIZACIÓN": "5802363-9487AISP",
+    "NOMBRE DE COTIZACIÓN": "Servicio de Integración Google Maps Platform, Visor Geográfico & GCP",
+    "ORGANIZACIÓN": "Subsecretaría del Ministerio de Hacienda",
+    "NOMBRE DEL COMPRADOR": "María Elena Fuentes",
+    "PRESUPUESTO MÁXIMO": 45000000,
+    "FIN DE PUBLICACIÓN": "2026-08-28T18:00:00",
+    e_mail_usuario: "mfuentes@hacienda.cl",
+    fono_usuario: "+56 2 2828 1000",
+    cargo: "Jefa de Unidad Digital",
+    comuna: "Santiago"
+  },
+  {
     numero_de_la_orden_de_compra: "OC-5802363-9800",
     nombre_de_la_orden_de_compra: "Servicio de Desarrollo e Integración de Visor Geográfico Google Maps API",
     razon_social: "Carabineros de Chile - Dirección de Logística",
@@ -336,35 +348,77 @@ const SEED_OPPORTUNITIES = [
   }
 ];
 
-function mapOpportunityRecord(r: any) {
-  const getVal = (keys: string[]): string => {
-    for (const k of keys) {
-      if (r[k] !== undefined && r[k] !== null) {
-        const val = String(r[k]).trim();
-        if (val) return val;
-      }
-    }
-    return '';
-  };
+function cleanString(val: any): string {
+  if (val === undefined || val === null) return '';
+  return String(val).replace(/[\r\n]+/g, ' ').trim();
+}
 
-  const idVal = getVal(['numero_de_la_orden_de_compra', 'numero_orden_compra', 'code', 'codigo', 'id']);
-  const codeVal = idVal;
-  const titleVal = getVal(['nombre_de_la_orden_de_compra', 'nombre_orden_compra', 'title', 'nombre', 'name']);
-  const nameVal = titleVal;
-  const buyerVal = getVal(['razon_social', 'unidad_de_compra', 'buyer', 'organismo', 'comprador', 'organism', 'institution']);
-  const organismVal = getVal(['razon_social', 'organismo', 'organism', 'unidad_de_compra']) || buyerVal;
-  const institutionVal = getVal(['unidad_de_compra', 'razon_social', 'institucion', 'institution']) || buyerVal;
-  const contactNameVal = getVal(['nombre_completo', 'contactName', 'contacto', 'nombre_contacto']);
-  const contactEmailVal = getVal(['e_mail_usuario', 'email_usuario', 'contactEmail', 'correo', 'email']);
-  const contactPhoneVal = getVal(['fono_usuario', 'telefono_usuario', 'contactPhone', 'telefono', 'fono']);
-  const contactRoleVal = getVal(['cargo', 'contactRole', 'cargo_usuario']);
-  const locationVal = getVal(['comuna', 'location', 'ciudad', 'region']);
-  const rawType = getVal(['tipo', 'type']);
+function mapOpportunityRecord(r: any) {
+  if (!r || typeof r !== 'object') return null;
+
+  // 1. Extraer ID (ID COTIZACIÓN || id_cotizacion || numero_de_la_orden_de_compra)
+  const idRaw = r['ID COTIZACIÓN'] || r['ID COTIZACION'] || r['id_cotizacion'] || r['ID_COTIZACION']
+    || r['numero_de_la_orden_de_compra'] || r['numero_orden_compra']
+    || r['code'] || r['codigo'] || r['id'];
+  const idVal = cleanString(idRaw);
+
+  // 2. Extraer Nombre (NOMBRE DE COTIZACIÓN || nombre_de_cotizacion || nombre_de_la_orden_de_compra)
+  const nameRaw = r['NOMBRE DE COTIZACIÓN'] || r['NOMBRE DE COTIZACION'] || r['nombre_de_cotizacion'] || r['NOMBRE_DE_COTIZACION']
+    || r['nombre_de_la_orden_de_compra'] || r['nombre_orden_compra']
+    || r['title'] || r['nombre'] || r['name'];
+  const titleVal = cleanString(nameRaw);
+
+  // REGLA ESTRICTA: Si no tiene ID o Nombre válido, desechar la fila
+  if (!idVal || !titleVal) {
+    return null;
+  }
+
+  // 3. Extraer Organismo (ORGANIZACIÓN || organizacion || razon_social || unidad_de_compra)
+  const buyerRaw = r['ORGANIZACIÓN'] || r['ORGANIZACION'] || r['organizacion'] || r['ORGANIZACION_COMPRADORA']
+    || r['razon_social'] || r['unidad_de_compra']
+    || r['buyer'] || r['organismo'] || r['comprador'] || r['organism'] || r['institution'];
+  const buyerVal = cleanString(buyerRaw) || 'Organismo Público';
+
+  // 4. Extraer Contacto (NOMBRE DEL COMPRADOR || nombre_completo)
+  const contactRaw = r['NOMBRE DEL COMPRADOR'] || r['NOMBRE_DEL_COMPRADOR'] || r['nombre_del_comprador']
+    || r['nombre_completo'] || r['contactName'] || r['contacto'] || r['nombre_contacto'];
+  const contactNameVal = cleanString(contactRaw) || 'Contacto Registrado';
+
+  const contactEmailVal = cleanString(r['e_mail_usuario'] || r['email_usuario'] || r['contactEmail'] || r['correo'] || r['email']) || 'contacto@mercadopublico.cl';
+  const contactPhoneVal = cleanString(r['fono_usuario'] || r['telefono_usuario'] || r['contactPhone'] || r['telefono'] || r['fono']) || '+56 2 2000 0000';
+  const contactRoleVal = cleanString(r['cargo'] || r['contactRole'] || r['cargo_usuario']) || 'Encargado de Adquisiciones';
+  const locationVal = cleanString(r['comuna'] || r['location'] || r['ciudad'] || r['region']) || 'Santiago';
+
+  // 5. Extraer Presupuesto / Monto (PRESUPUESTO MÁXIMO || total_oc)
+  const rawAmount = r['PRESUPUESTO MÁXIMO'] !== undefined ? r['PRESUPUESTO MÁXIMO']
+    : (r['PRESUPUESTO MAXIMO'] !== undefined ? r['PRESUPUESTO MAXIMO']
+      : (r['presupuesto_maximo'] !== undefined ? r['presupuesto_maximo']
+        : (r['total_oc'] !== undefined ? r['total_oc']
+          : (r['neto_clp'] !== undefined ? r['neto_clp'] : (r['amount'] || r['monto'] || 0)))));
+
+  const parsedAmount = typeof rawAmount === 'number'
+    ? rawAmount
+    : parseFloat(cleanString(rawAmount).replace(/[^0-9.-]+/g, '')) || 0;
+
+  // 6. Fecha Cierre (FIN DE PUBLICACIÓN || fecha_cierre)
+  const closingRaw = r['FIN DE PUBLICACIÓN'] || r['FIN DE PUBLICACION'] || r['fin_de_publicacion'] || r['FIN_DE_PUBLICACION']
+    || r['fecha_cierre'] || r['fechaCierre'] || r['fecha_de_creacion'] || r['closingDate'] || r['endDate'];
+  let closingDateVal = cleanString(closingRaw);
+  if (!closingDateVal || isNaN(new Date(closingDateVal).getTime()) || new Date(closingDateVal).getTime() <= Date.now()) {
+    closingDateVal = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // Determinar Modalidad / Tipo
+  const hasIdCotizacion = Boolean(r['ID COTIZACIÓN'] || r['ID COTIZACION'] || r['id_cotizacion'] || r['ID_COTIZACION']);
+  const rawType = cleanString(r['tipo'] || r['type']);
   let typeVal = rawType;
-  if (!typeVal || typeVal === 'Orden de Compra') {
-    const codeUpper = (idVal || '').toUpperCase();
-    const titleUpper = (titleVal || '').toUpperCase();
-    if (codeUpper.startsWith('CM-') || titleUpper.includes('CONVENIO MARCO') || titleUpper.includes('CONVENIO')) {
+
+  if (hasIdCotizacion) {
+    typeVal = 'Convenio Marco';
+  } else if (!typeVal || typeVal === 'Orden de Compra') {
+    const codeUpper = idVal.toUpperCase();
+    const titleUpper = titleVal.toUpperCase();
+    if (codeUpper.startsWith('CM-') || codeUpper.includes('AISP') || titleUpper.includes('CONVENIO MARCO') || titleUpper.includes('CONVENIO')) {
       typeVal = 'Convenio Marco';
     } else if (codeUpper.includes('COT') || titleUpper.includes('COMPRA AGIL') || titleUpper.includes('COMPRA ÁGIL')) {
       typeVal = 'Compra Agil';
@@ -373,56 +427,46 @@ function mapOpportunityRecord(r: any) {
     }
   }
 
-  const statusVal = getVal(['estado', 'status', 'estado_oc']) || 'Publicada';
-
-  const rawAmount = r.total_oc !== undefined && r.total_oc !== null && String(r.total_oc).trim() !== ''
-    ? r.total_oc
-    : (r.neto_clp !== undefined && r.neto_clp !== null && String(r.neto_clp).trim() !== '' ? r.neto_clp : (r.amount || r.monto || 0));
-
-  const parsedAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/[^0-9.-]+/g, '')) || 0;
-
-  // Set default closing date to 20 days in the future if missing or past
-  const rawClosing = getVal(['fecha_de_creacion', 'fecha_creacion', 'closingDate', 'fechaCierre', 'endDate']);
-  let closingDateVal = rawClosing;
-  if (!closingDateVal || new Date(closingDateVal).getTime() <= Date.now()) {
-    closingDateVal = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
-  }
-  const endDateVal = getVal(['fecha_de_entrega', 'endDate', 'fechaCierre', 'closingDate']) || closingDateVal;
+  const statusVal = cleanString(r['estado'] || r['status'] || r['estado_oc']) || 'Publicada';
 
   return {
-    id: idVal || `OC-${Math.floor(Math.random() * 1000000)}`,
-    code: codeVal || `OC-${Math.floor(Math.random() * 1000000)}`,
-    title: titleVal || 'Orden de Compra Mercado Público',
-    name: nameVal || 'Orden de Compra Mercado Público',
-    buyer: buyerVal || 'Organismo Público',
-    organism: organismVal || 'Organismo Público',
-    institution: institutionVal || 'Organismo Público',
-    contactName: contactNameVal || 'Contacto Registrado',
-    contactEmail: contactEmailVal || 'contacto@mercadopublico.cl',
-    contactPhone: contactPhoneVal || '+56 2 2000 0000',
-    contactRole: contactRoleVal || 'Encargado de Adquisiciones',
-    location: locationVal || 'Santiago',
+    id: idVal,
+    code: idVal,
+    title: titleVal,
+    name: titleVal,
+    buyer: buyerVal,
+    organism: buyerVal,
+    institution: buyerVal,
+    contactName: contactNameVal,
+    contactEmail: contactEmailVal,
+    contactPhone: contactPhoneVal,
+    contactRole: contactRoleVal,
+    location: locationVal,
     type: typeVal,
     closingDate: closingDateVal,
-    endDate: endDateVal,
+    endDate: closingDateVal,
     status: statusVal,
     amount: parsedAmount
   };
 }
 
 function readOpportunitiesData(): any[] {
+  let records: any[] = [];
   if (fs.existsSync(OPPORTUNITIES_FILE)) {
     try {
       const raw = fs.readFileSync(OPPORTUNITIES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(mapOpportunityRecord);
+        records = parsed;
       }
     } catch (e) {
       console.warn("⚠️ Error leyendo opportunities.json");
     }
   }
-  return SEED_OPPORTUNITIES.map(mapOpportunityRecord);
+  if (records.length === 0) {
+    records = SEED_OPPORTUNITIES;
+  }
+  return records.map(mapOpportunityRecord).filter((item): item is NonNullable<typeof item> => item !== null);
 }
 
 function writeOpportunitiesData(data: any[]) {

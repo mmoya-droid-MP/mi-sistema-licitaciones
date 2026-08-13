@@ -46,12 +46,13 @@ export function getItemSearchableText(item: {
   [key: string]: any;
 }): string {
   const rawParts = [
-    item.codigo || item.id || '',
-    item.nombre || '',
-    item.cliente || item.organismo || '',
+    item.codigo || item.id || item.code || item['ID COTIZACIÓN'] || item['ID COTIZACION'] || item.id_cotizacion || '',
+    item.nombre || item.title || item['NOMBRE DE COTIZACIÓN'] || item['NOMBRE DE COTIZACION'] || item.nombre_de_cotizacion || '',
+    item.cliente || item.organismo || item.buyer || item['ORGANIZACIÓN'] || item['ORGANIZACION'] || item.organizacion || item.razon_social || '',
+    item.contactName || item['NOMBRE DEL COMPRADOR'] || item.nombre_completo || '',
     item.descripcion || '',
     item.materia || '',
-    item.region || '',
+    item.region || item.location || item.comuna || '',
     item.tags ? item.tags.join(' ') : ''
   ];
   return normalizeText(rawParts.join(' '));
@@ -144,18 +145,18 @@ export function matchesFlexibleTipo(itemTipo: string, selectedTipo: string, item
  */
 export function getItemCodigo(item: any): string {
   if (!item) return 'S/I';
-  const raw = item.codigoId || item.codigo || item['Código ID'] || item['Codigo ID'] || item.codigoLicitacion || item.id || 'S/I';
+  const raw = item.codigoId || item.codigo || item['ID COTIZACIÓN'] || item['ID COTIZACION'] || item.id_cotizacion || item['Código ID'] || item['Codigo ID'] || item.codigoLicitacion || item.id || 'S/I';
   return cleanOfficialId(raw);
 }
 
 export function getItemNombre(item: any): string {
   if (!item) return 'Sin Título';
-  return item.nombre || item['Nombre del Requerimiento'] || item.licitacionNombre || item.title || 'Sin Título';
+  return item.nombre || item['NOMBRE DE COTIZACIÓN'] || item['NOMBRE DE COTIZACION'] || item.nombre_de_cotizacion || item['Nombre del Requerimiento'] || item.licitacionNombre || item.title || 'Sin Título';
 }
 
 export function getItemOrganismo(item: any): string {
   if (!item) return 'N/A';
-  return item.organismo || item.cliente || item['Organismo Comprador'] || item.organismoComprador || 'N/A';
+  return item.organismo || item.cliente || item['ORGANIZACIÓN'] || item['ORGANIZACION'] || item.organizacion || item.razon_social || item['Organismo Comprador'] || item.organismoComprador || 'N/A';
 }
 
 export function getItemDescripcion(item: any): string {
@@ -165,6 +166,7 @@ export function getItemDescripcion(item: any): string {
 
 export function getItemTipo(item: any): string {
   if (!item) return 'Licitación';
+  if (item['ID COTIZACIÓN'] || item['ID COTIZACION'] || item.id_cotizacion) return 'Convenio Marco';
   return item.tipo || item['Tipo de Proceso'] || item.tipoProceso || 'Licitación';
 }
 
@@ -172,13 +174,16 @@ export function getItemFechaCierre(item: any): string {
   if (!item) return new Date().toISOString();
   const extracted = extractFechaCierre(item);
   if (extracted) return extracted;
-  return item.fechaCierre || item['Fecha Cierre (Chile CLT)'] || item['Fecha Cierre'] || item.fechaCierreOriginal || new Date().toISOString();
+  return item.fechaCierre || item['FIN DE PUBLICACIÓN'] || item['FIN DE PUBLICACION'] || item.fin_de_publicacion || item['Fecha Cierre (Chile CLT)'] || item['Fecha Cierre'] || item.fechaCierreOriginal || new Date().toISOString();
 }
 
 export function getItemMonto(item: any): number {
   if (!item) return 0;
   if (typeof item.montoEstimadoClp === 'number') return item.montoEstimadoClp;
   if (typeof item.montoOfertaClp === 'number') return item.montoOfertaClp;
+  if (typeof item['PRESUPUESTO MÁXIMO'] === 'number') return item['PRESUPUESTO MÁXIMO'];
+  if (typeof item['PRESUPUESTO MAXIMO'] === 'number') return item['PRESUPUESTO MAXIMO'];
+  if (typeof item.presupuesto_maximo === 'number') return item.presupuesto_maximo;
   if (typeof item['Monto Estimado CLP'] === 'number') return item['Monto Estimado CLP'];
   return 0;
 }

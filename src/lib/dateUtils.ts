@@ -52,8 +52,11 @@ export function extractFechaCierre(rawItem: any): string {
   }
 
   // 2. Convenio Marco (CM) & Solicitudes de Cotización
-  if (isCM || rawItem.Cotizacion) {
+  if (isCM || rawItem.Cotizacion || rawItem['FIN DE PUBLICACIÓN'] || rawItem['FIN DE PUBLICACION'] || rawItem.fin_de_publicacion) {
     if (rawId.includes('5802363-9800AAID')) return '2026-08-11 16:00:00';
+    if (rawItem['FIN DE PUBLICACIÓN']) return String(rawItem['FIN DE PUBLICACIÓN']);
+    if (rawItem['FIN DE PUBLICACION']) return String(rawItem['FIN DE PUBLICACION']);
+    if (rawItem.fin_de_publicacion) return String(rawItem.fin_de_publicacion);
     if (rawItem.FechaFinPublicacion) return String(rawItem.FechaFinPublicacion);
     if (rawItem.FechaCierreCotizacion) return String(rawItem.FechaCierreCotizacion);
     if (rawItem['Plazo límite para la recepción de cotizaciones/ofertas']) return String(rawItem['Plazo límite para la recepción de cotizaciones/ofertas']);
