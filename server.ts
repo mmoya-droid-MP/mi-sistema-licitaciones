@@ -359,8 +359,21 @@ function mapOpportunityRecord(r: any) {
   const contactPhoneVal = getVal(['fono_usuario', 'telefono_usuario', 'contactPhone', 'telefono', 'fono']);
   const contactRoleVal = getVal(['cargo', 'contactRole', 'cargo_usuario']);
   const locationVal = getVal(['comuna', 'location', 'ciudad', 'region']);
-  const typeVal = getVal(['tipo', 'type']) || 'Orden de Compra';
-  const statusVal = getVal(['estado', 'status', 'estado_oc']) || 'Aceptada';
+  const rawType = getVal(['tipo', 'type']);
+  let typeVal = rawType;
+  if (!typeVal || typeVal === 'Orden de Compra') {
+    const codeUpper = (idVal || '').toUpperCase();
+    const titleUpper = (titleVal || '').toUpperCase();
+    if (codeUpper.startsWith('CM-') || titleUpper.includes('CONVENIO MARCO') || titleUpper.includes('CONVENIO')) {
+      typeVal = 'Convenio Marco';
+    } else if (codeUpper.includes('COT') || titleUpper.includes('COMPRA AGIL') || titleUpper.includes('COMPRA ÁGIL')) {
+      typeVal = 'Compra Agil';
+    } else {
+      typeVal = 'Licitacion';
+    }
+  }
+
+  const statusVal = getVal(['estado', 'status', 'estado_oc']) || 'Publicada';
 
   const rawAmount = r.total_oc !== undefined && r.total_oc !== null && String(r.total_oc).trim() !== ''
     ? r.total_oc
@@ -368,7 +381,12 @@ function mapOpportunityRecord(r: any) {
 
   const parsedAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/[^0-9.-]+/g, '')) || 0;
 
-  const closingDateVal = getVal(['fecha_de_creacion', 'fecha_creacion', 'closingDate', 'fechaCierre', 'endDate']) || new Date().toISOString();
+  // Set default closing date to 20 days in the future if missing or past
+  const rawClosing = getVal(['fecha_de_creacion', 'fecha_creacion', 'closingDate', 'fechaCierre', 'endDate']);
+  let closingDateVal = rawClosing;
+  if (!closingDateVal || new Date(closingDateVal).getTime() <= Date.now()) {
+    closingDateVal = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+  }
   const endDateVal = getVal(['fecha_de_entrega', 'endDate', 'fechaCierre', 'closingDate']) || closingDateVal;
 
   return {

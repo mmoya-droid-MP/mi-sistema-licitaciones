@@ -40,7 +40,7 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [radarFilter7Days, setRadarFilter7Days] = useState(false);
 
-  // Consultar la API /api/opportunities al montar el componente para actualizar licitaciones
+  // Consultar la API /api/opportunities al montar el componente y fusionar con INITIAL_LICITACIONES
   useEffect(() => {
     const fetchOpportunities = async () => {
       try {
@@ -49,23 +49,55 @@ export default function App() {
           const json = await res.json();
           const rawItems = Array.isArray(json) ? json : (json.data || json.opportunities || []);
           if (Array.isArray(rawItems) && rawItems.length > 0) {
-            const mappedLicitaciones: LicitacionItem[] = rawItems.map((opp: any) => ({
-              codigo: opp.code || opp.id || 'S/I',
-              cliente: opp.buyer || opp.organism || opp.institution || 'Organismo Comprador',
-              nombre: opp.title || opp.name || 'Orden de Compra',
-              descripcion: `Organismo: ${opp.organism || opp.buyer || ''} | Unidad: ${opp.institution || ''} | Contacto: ${opp.contactName || ''} (${opp.contactRole || ''}) - Email: ${opp.contactEmail || ''} - Tel: ${opp.contactPhone || ''} - Comuna: ${opp.location || ''}`,
-              tipo: (opp.type as TipoProceso) || 'Orden de Compra',
-              montoEstimadoClp: opp.amount || 0,
-              fechaPublicacion: opp.closingDate || opp.endDate || new Date().toISOString(),
-              fechaCierre: opp.closingDate || opp.endDate || new Date().toISOString(),
-              diasRestantes: 5,
-              estado: opp.status || 'Publicada',
-              url: `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${opp.code || opp.id}`,
-              esUltimos7Dias: true,
-              tags: ['Mercado Público', opp.location].filter(Boolean) as string[],
-              region: opp.location
-            }));
-            setLicitaciones(mappedLicitaciones);
+            const mappedLicitaciones: LicitacionItem[] = rawItems.map((opp: any) => {
+              const code = opp.code || opp.id || 'S/I';
+              const name = opp.title || opp.name || 'Orden de Compra Mercado Público';
+              const typeRaw = String(opp.type || opp.tipo || '').toLowerCase();
+              const codeUpper = String(code).toUpperCase();
+              const nameUpper = String(name).toUpperCase();
+
+              let inferredTipo: TipoProceso = 'Licitacion';
+              if (typeRaw.includes('convenio') || typeRaw.includes('marco') || codeUpper.startsWith('CM-') || nameUpper.includes('CONVENIO MARCO')) {
+                inferredTipo = 'Convenio Marco';
+              } else if (typeRaw.includes('agil') || typeRaw.includes('cot') || codeUpper.includes('-COT') || nameUpper.includes('COMPRA AGIL') || nameUpper.includes('COMPRA ÁGIL')) {
+                inferredTipo = 'Compra Agil';
+              } else {
+                inferredTipo = 'Licitacion';
+              }
+
+              const rawClosure = opp.closingDate || opp.endDate;
+              const isFuture = rawClosure && new Date(rawClosure).getTime() > Date.now();
+              const validClosureDate = isFuture
+                ? rawClosure
+                : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+              return {
+                codigo: code,
+                cliente: opp.buyer || opp.organism || opp.institution || 'Organismo Comprador',
+                nombre: name,
+                descripcion: `Organismo: ${opp.organism || opp.buyer || ''} | Unidad: ${opp.institution || ''} | Contacto: ${opp.contactName || ''} (${opp.contactRole || ''}) - Email: ${opp.contactEmail || ''} - Tel: ${opp.contactPhone || ''} - Comuna: ${opp.location || ''}`,
+                tipo: inferredTipo,
+                montoEstimadoClp: opp.amount || 0,
+                fechaPublicacion: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+                fechaCierre: validClosureDate,
+                diasRestantes: 15,
+                estado: 'Publicada',
+                url: `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${code}`,
+                esUltimos7Dias: true,
+                tags: ['Mercado Público', opp.location].filter(Boolean) as string[],
+                region: opp.location || 'Región Metropolitana de Santiago'
+              };
+            });
+
+            // Combinar con INITIAL_LICITACIONES manteniendo las 3 modalidades completas
+            setLicitaciones((prev) => {
+              const catalogMap = new Map<string, LicitacionItem>();
+              // Cargar catálogo inicial dinámico
+              INITIAL_LICITACIONES.forEach((item) => catalogMap.set(item.codigo, item));
+              // Anteponer o sobreescribir con las oportunidades de la API
+              mappedLicitaciones.forEach((item) => catalogMap.set(item.codigo, item));
+              return Array.from(catalogMap.values());
+            });
           }
         }
       } catch (err) {

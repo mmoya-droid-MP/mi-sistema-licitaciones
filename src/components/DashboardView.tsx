@@ -266,72 +266,121 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {isTableExpanded && (
           <div className="p-4 sm:p-5 space-y-4">
             {/* Table Filters bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <div className="relative w-full max-w-md">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                  🔍
-                </span>
-                <input
-                  type="text"
-                  placeholder="Buscar por ID, nombre u organismo..."
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if ((window as any).searchTimeout) clearTimeout((window as any).searchTimeout);
-                    (window as any).searchTimeout = setTimeout(() => {
-                      setTableSearch(value);
-                    }, 300);
-                  }}
-                  style={{
-                    color: '#0f172a',
-                    backgroundColor: '#ffffff',
-                    caretColor: '#0f172a',
-                    WebkitTextFillColor: '#0f172a',
-                    opacity: 1
-                  }}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
-                />
+            <div className="flex flex-col gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="relative w-full max-w-lg">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    🔍
+                  </span>
+                  <input
+                    type="text"
+                    value={tableSearch}
+                    onChange={(e) => setTableSearch(e.target.value)}
+                    placeholder="Buscar por código, título, organismo o palabra clave..."
+                    style={{
+                      color: '#0f172a',
+                      backgroundColor: '#ffffff',
+                      caretColor: '#0f172a',
+                      WebkitTextFillColor: '#0f172a',
+                      opacity: 1
+                    }}
+                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
+                  />
+                  {tableSearch && (
+                    <button
+                      onClick={() => setTableSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                  {/* Status Toggle Buttons */}
+                  <div className="flex items-center space-x-1 bg-white border border-slate-300 p-1 rounded-lg">
+                    <button
+                      onClick={() => setTableStatus('ACTIVAS')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                        tableStatus === 'ACTIVAS' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Activas ({activas.length})
+                    </button>
+                    <button
+                      onClick={() => setTableStatus('VENCIDAS')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                        tableStatus === 'VENCIDAS' ? 'bg-red-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Vencidas ({vencidas.length})
+                    </button>
+                    <button
+                      onClick={() => setTableStatus('TODAS')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                        tableStatus === 'TODAS' ? 'bg-slate-800 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Todas ({licitaciones.length})
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center space-x-1 bg-white border border-slate-300 p-1 rounded-lg">
+              {/* Process Type Filter Buttons Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-600 mr-1 flex items-center">
+                    <Filter className="w-3.5 h-3.5 mr-1 text-blue-600" /> Modalidad:
+                  </span>
+
                   <button
-                    onClick={() => setTableStatus('ACTIVAS')}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
-                      tableStatus === 'ACTIVAS' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600'
+                    onClick={() => setTableTipo('TODOS')}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
+                      tableTipo === 'TODOS'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    Activas ({activas.length})
+                    Todas ({safeLicitaciones.length})
                   </button>
+
                   <button
-                    onClick={() => setTableStatus('VENCIDAS')}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
-                      tableStatus === 'VENCIDAS' ? 'bg-red-600 text-white shadow-2xs' : 'text-slate-600'
+                    onClick={() => setTableTipo('Licitacion')}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
+                      tableTipo === 'Licitacion'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    Vencidas ({vencidas.length})
+                    📋 Licitación ({safeLicitaciones.filter(i => matchesFlexibleTipo(i?.tipo, 'Licitacion', i?.codigo)).length})
                   </button>
+
                   <button
-                    onClick={() => setTableStatus('TODAS')}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
-                      tableStatus === 'TODAS' ? 'bg-slate-800 text-white shadow-2xs' : 'text-slate-600'
+                    onClick={() => setTableTipo('Convenio Marco')}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
+                      tableTipo === 'Convenio Marco'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    Todas ({licitaciones.length})
+                    🤝 Convenio Marco ({safeLicitaciones.filter(i => matchesFlexibleTipo(i?.tipo, 'Convenio Marco', i?.codigo)).length})
+                  </button>
+
+                  <button
+                    onClick={() => setTableTipo('Compra Agil')}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
+                      tableTipo === 'Compra Agil'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⚡ Compra Ágil ({safeLicitaciones.filter(i => matchesFlexibleTipo(i?.tipo, 'Compra Agil', i?.codigo)).length})
                   </button>
                 </div>
 
-                <div className="flex items-center space-x-1">
-                  <Filter className="w-4 h-4 text-slate-500" />
-                  <select
-                    value={tableTipo}
-                    onChange={(e) => setTableTipo(e.target.value)}
-                    className="text-xs font-semibold border border-slate-300 rounded-lg bg-white px-3 py-1.5 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="TODOS">Todos los Tipos</option>
-                    <option value="Licitacion Publica">Licitación Pública</option>
-                    <option value="Convenio Marco">Convenio Marco</option>
-                    <option value="Compra Agil">Compra Ágil</option>
-                  </select>
+                <div className="text-xs font-medium text-slate-500">
+                  Mostrando <strong className="text-slate-900">{filteredTableItems.length}</strong> resultados
                 </div>
               </div>
             </div>
