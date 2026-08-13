@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
+import { useDebounce } from '../lib/useDebounce';
 import {
   Sparkles,
   Flame,
@@ -26,8 +27,9 @@ import {
 import { LicitacionItem, Postulacion, AlertaRule, OrdenCompraItem } from '../types';
 import { openGoogleCalendar } from '../lib/googleCalendar';
 import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, isItemExpired, cleanOfficialId, extractFechaCierre } from '../lib/dateUtils';
-import { matchesDeepSearch, matchesFlexibleTipo, cleanTextPrefixes } from '../lib/searchUtils';
+import { matchesSearchTerm, matchesTipoExact, cleanTextPrefixes } from '../lib/searchUtils';
 import { CreateAlertModal } from './CreateAlertModal';
+import { fetchLicitacionPorCodigo } from '../services/mercadoPublicoApi';
 
 interface DashboardViewProps {
   licitaciones: LicitacionItem[];
@@ -42,6 +44,7 @@ interface DashboardViewProps {
   openShareModal?: () => void;
   openAuthModal?: () => void;
   onAddAlerta?: (alerta: AlertaRule) => void;
+  onFastTrackSearchResult?: (items: LicitacionItem[]) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -52,10 +55,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onAddPostulacion,
   onNavigateToRadar,
   openReportsModal,
-  onAddAlerta
+  onAddAlerta,
+  onFastTrackSearchResult
 }) => {
   const [tableSearch, setTableSearch] = useState('');
-  const [tableTipo, setTableTipo] = useState<string>('TODOS');
+  const debouncedTableSearch = useDebounce(tableSearch, 300);
+
+  // Fast-Track búsqueda directa por código
+  useEffect(() => {
+    if (!debouncedTableSearch) return;
+    const cleanTerm = debouncedTableSearch.trim();
+
+    const isCodePattern = /^[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/i.test(cleanTerm) ||
+                          /^(CM|CO|COT)-[0-9a-zA-Z]+/i.test(cleanTerm) ||
+                          /^[0-9]{4,}-[0-9a-zA-Z]+/i.test(cleanTerm);
+
+    if (isCodePattern) {
+      fetchLicitacionPorCodigo(cleanTerm).then((found) => {
+        if (found && found.length > 0 && onFastTrackSearchResult) {
+          onFastTrackSearchResult(found);
+        }
+      }).catch((err) => console.warn('Dashboard Fast-track error:', err));
+    }
+  }, [debouncedTableSearch, onFastTrackSearchResult]);
+
+  const [tableTipo, setTableTipo] = useState<string>('Todas');
   const [tableStatus, setTableStatus] = useState<'ACTIVAS' | 'VENCIDAS' | 'TODAS'>('ACTIVAS');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [alertModalItem, setAlertModalItem] = useState<LicitacionItem | null>(null);
@@ -71,33 +95,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const urgentes = useMemo(() => activas.filter((item) => (item?.diasRestantes ?? 99) <= 3 && (item?.diasRestantes ?? -1) >= 0), [activas]);
   const postulacionesEnCurso = useMemo(() => safePostulaciones.filter((p) => p && p.estadoPostulacion !== 'Adjudicada' && p.estadoPostulacion !== 'Desestimada'), [safePostulaciones]);
 
-  const montoTotalLicitado = useMemo(() => activas.reduce((acc, curr) => acc + (curr?.montoEstimadoClp || 0), 0), [activas]);
+  const montoTotalLicitado = useMemo(() => activas.reduce((acc, curr) => {
+    const val = typeof curr?.monto === 'number' ? curr.monto : (typeof curr?.montoEstimadoClp === 'number' ? curr.montoEstimadoClp : Number(curr?.monto || curr?.montoEstimadoClp || 0));
+    return acc + (isNaN(val) ? 0 : val);
+  }, 0), [activas]);
 
-  // Filter table items by tableStatus, search query (multi-campo, coincidencia parcial) and tipo
+  // High performance filtered table items with deferred search input to prevent input lag
   const filteredTableItems = useMemo(() => {
     return safeLicitaciones.filter((item) => {
       if (!item) return false;
 
-      // Search term filter: multi-campo, coincidencia parcial (.includes)
-      const hasSearchQuery = Boolean(tableSearch && tableSearch.trim());
-      if (hasSearchQuery && !matchesDeepSearch(item, tableSearch)) {
+      const hasSearchQuery = Boolean(debouncedTableSearch && debouncedTableSearch.trim());
+
+      // 1. Search across id, nombre, organism (case insensitive toLowerCase)
+      if (hasSearchQuery && !matchesSearchTerm(item, debouncedTableSearch)) {
         return false;
       }
 
-      // If no search query is active, enforce the selected status tab (ACTIVAS vs VENCIDAS)
+      // 2. Modality filter directly on tipo ("Todas", "Licitación", "Convenio Marco", "Compra Ágil")
+      if (tableTipo !== 'Todas' && tableTipo !== 'TODOS' && !matchesTipoExact(item.tipo, tableTipo)) {
+        return false;
+      }
+
+      // 3. Status filter if no search term active
       if (!hasSearchQuery) {
         const expired = isItemExpired(item);
         if (tableStatus === 'ACTIVAS' && expired) return false;
         if (tableStatus === 'VENCIDAS' && !expired) return false;
       }
 
-      // Process type filter (Licitación, Convenio Marco, Compra Ágil)
-      if (tableTipo !== 'TODOS' && !matchesFlexibleTipo(item.tipo, tableTipo, item.codigo)) {
-        return false;
-      }
       return true;
     });
-  }, [safeLicitaciones, tableStatus, tableSearch, tableTipo]);
+  }, [safeLicitaciones, tableStatus, debouncedTableSearch, tableTipo]);
 
   return (
     <div className="space-y-8 pb-12">
@@ -343,9 +372,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </span>
 
                   <button
-                    onClick={() => setTableTipo('TODOS')}
+                    onClick={() => setTableTipo('Todas')}
                     className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
-                      tableTipo === 'TODOS'
+                      tableTipo === 'Todas' || tableTipo === 'TODOS'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
@@ -354,14 +383,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </button>
 
                   <button
-                    onClick={() => setTableTipo('Licitacion')}
+                    onClick={() => setTableTipo('Licitación')}
                     className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
-                      tableTipo === 'Licitacion'
+                      tableTipo === 'Licitación' || tableTipo === 'Licitacion'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    📋 Licitación ({safeLicitaciones.filter(i => matchesFlexibleTipo(i?.tipo, 'Licitacion', i?.codigo)).length})
+                    📋 Licitación ({safeLicitaciones.filter(i => matchesTipoExact(i?.tipo, 'Licitación')).length})
                   </button>
 
                   <button
@@ -372,18 +401,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    🤝 Convenio Marco ({safeLicitaciones.filter(i => matchesFlexibleTipo(i?.tipo, 'Convenio Marco', i?.codigo)).length})
+                    🤝 Convenio Marco ({safeLicitaciones.filter(i => matchesTipoExact(i?.tipo, 'Convenio Marco')).length})
                   </button>
 
                   <button
-                    onClick={() => setTableTipo('Compra Agil')}
+                    onClick={() => setTableTipo('Compra Ágil')}
                     className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
-                      tableTipo === 'Compra Agil'
+                      tableTipo === 'Compra Ágil' || tableTipo === 'Compra Agil'
                         ? 'bg-purple-600 text-white shadow-xs'
                         : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    ⚡ Compra Ágil ({safeLicitaciones.filter(i => matchesFlexibleTipo(i?.tipo, 'Compra Agil', i?.codigo)).length})
+                    ⚡ Compra Ágil ({safeLicitaciones.filter(i => matchesTipoExact(i?.tipo, 'Compra Ágil')).length})
                   </button>
                 </div>
 
@@ -415,7 +444,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filteredTableItems.map((item) => {
+                    filteredTableItems.slice(0, 100).map((item) => {
                       const expired = isItemExpired(item);
                       const fc = extractFechaCierre(item) || item.fechaCierre;
                       const timeInfo = calculateChileRemainingTime(fc);

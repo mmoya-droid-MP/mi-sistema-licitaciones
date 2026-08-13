@@ -270,6 +270,32 @@ const OPPORTUNITIES_FILE = path.join(process.cwd(), "opportunities.json");
 
 const SEED_OPPORTUNITIES = [
   {
+    CodigoExterno: "425-37-LP26",
+    Nombre: "Licitación Pública para Servicios Informáticos y Plataforma Cloud GCP",
+    NombreOrganismo: "Servicio de Impuestos Internos (SII)",
+    NombreComprador: "Roberto Godoy - Jefe Adquisiciones TI",
+    PresupuestoMaximo: 85000000,
+    FechaFinPublicacion: "2026-09-10T18:00:00",
+    e_mail_usuario: "rgodoy@sii.cl",
+    fono_usuario: "+56 2 2390 2000",
+    cargo: "Jefe de Adquisiciones TI",
+    comuna: "Santiago",
+    tipo: "Licitación"
+  },
+  {
+    CodigoExterno: "587-32-LE26",
+    Nombre: "Desarrollo e Interoperabilidad de Plataforma GIS y Geolocalización en Nube GCP",
+    NombreOrganismo: "Ministerio de Vivienda y Urbanismo (MINVU)",
+    NombreComprador: "Carlos Retamales - Director GIS",
+    PresupuestoMaximo: 180000000,
+    FechaFinPublicacion: "2026-08-31T15:10:00",
+    e_mail_usuario: "cretamales@minvu.cl",
+    fono_usuario: "+56 2 2351 3000",
+    cargo: "Director de Sistemas GIS",
+    comuna: "Santiago",
+    tipo: "Licitación"
+  },
+  {
     "ID COTIZACIÓN": "5802363-9487AISP",
     "NOMBRE DE COTIZACIÓN": "Servicio de Integración Google Maps Platform, Visor Geográfico & GCP",
     "ORGANIZACIÓN": "Subsecretaría del Ministerio de Hacienda",
@@ -411,16 +437,28 @@ function mapOpportunityRecord(r: any) {
   // Determinar Modalidad / Tipo
   const hasIdCotizacion = Boolean(r['ID COTIZACIÓN'] || r['ID COTIZACION'] || r['id_cotizacion'] || r['ID_COTIZACION']);
   const rawType = cleanString(r['tipo'] || r['type']);
+  const codeUpper = idVal.toUpperCase();
+  const titleUpper = titleVal.toUpperCase();
+
   let typeVal = rawType;
 
-  if (hasIdCotizacion) {
+  if (
+    codeUpper.includes('-LP') ||
+    codeUpper.includes('-LE') ||
+    codeUpper.includes('-L1') ||
+    codeUpper.includes('-LQ') ||
+    codeUpper.includes('-LR') ||
+    codeUpper.includes('-LS') ||
+    codeUpper.includes('-E2') ||
+    codeUpper.includes('-L2')
+  ) {
+    typeVal = 'Licitacion';
+  } else if (hasIdCotizacion && !r['CodigoExterno']) {
     typeVal = 'Convenio Marco';
   } else if (!typeVal || typeVal === 'Orden de Compra') {
-    const codeUpper = idVal.toUpperCase();
-    const titleUpper = titleVal.toUpperCase();
     if (codeUpper.startsWith('CM-') || codeUpper.includes('AISP') || titleUpper.includes('CONVENIO MARCO') || titleUpper.includes('CONVENIO')) {
       typeVal = 'Convenio Marco';
-    } else if (codeUpper.includes('COT') || titleUpper.includes('COMPRA AGIL') || titleUpper.includes('COMPRA ÁGIL')) {
+    } else if (codeUpper.startsWith('CO-') || codeUpper.includes('COT') || titleUpper.includes('COMPRA AGIL') || titleUpper.includes('COMPRA ÁGIL')) {
       typeVal = 'Compra Agil';
     } else {
       typeVal = 'Licitacion';

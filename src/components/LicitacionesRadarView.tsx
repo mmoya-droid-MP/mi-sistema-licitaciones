@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
+import { useDebounce } from '../lib/useDebounce';
 import {
   Search,
   Filter,
@@ -23,8 +24,10 @@ import {
 import { LicitacionItem, TipoProceso, AlertaRule, SET_PALABRAS_CLAVE_MASTER } from '../types';
 import { openGoogleCalendar } from '../lib/googleCalendar';
 import { formatChileDateTime, calculateChileRemainingTime, getItemOfficialUrl, isItemExpired, cleanOfficialId, extractFechaCierre } from '../lib/dateUtils';
-import { matchesDeepSearch, matchesAllTagsDeep, matchesFlexibleTipo, cleanTextPrefixes } from '../lib/searchUtils';
+import { matchesSearchTerm, matchesTipoExact, matchesAllTagsDeep, cleanTextPrefixes } from '../lib/searchUtils';
 import { CreateAlertModal } from './CreateAlertModal';
+
+import { fetchLicitacionPorCodigo } from '../services/mercadoPublicoApi';
 
 interface LicitacionesRadarViewProps {
   licitaciones: LicitacionItem[];
@@ -36,6 +39,7 @@ interface LicitacionesRadarViewProps {
   onAddPostulacion?: (item: LicitacionItem) => void;
   onShareItem?: (item: LicitacionItem) => void;
   onAddAlerta?: (alerta: AlertaRule) => void;
+  onFastTrackSearchResult?: (items: LicitacionItem[]) => void;
   initial7DaysFilter?: boolean;
   setActiveTab?: (tab: any) => void;
 }
@@ -49,11 +53,33 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
   onAddPostulacion,
   onShareItem,
   onAddAlerta,
+  onFastTrackSearchResult,
   initial7DaysFilter = false,
   setActiveTab
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTipo, setSelectedTipo] = useState<TipoProceso | 'TODOS'>('TODOS');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Fast-Track Búsqueda Directa por Código (ej: "425-37-LP26")
+  useEffect(() => {
+    if (!debouncedSearchTerm) return;
+    const cleanTerm = debouncedSearchTerm.trim();
+
+    // Patrón de código de Mercado Público
+    const isCodePattern = /^[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/i.test(cleanTerm) ||
+                          /^(CM|CO|COT)-[0-9a-zA-Z]+/i.test(cleanTerm) ||
+                          /^[0-9]{4,}-[0-9a-zA-Z]+/i.test(cleanTerm);
+
+    if (isCodePattern) {
+      fetchLicitacionPorCodigo(cleanTerm).then((found) => {
+        if (found && found.length > 0 && onFastTrackSearchResult) {
+          onFastTrackSearchResult(found);
+        }
+      }).catch((err) => console.warn('Fast-track search error:', err));
+    }
+  }, [debouncedSearchTerm, onFastTrackSearchResult]);
+
+  const [selectedTipo, setSelectedTipo] = useState<string>('TODOS');
   const [selectedStatus, setSelectedStatus] = useState<'ACTIVAS' | 'VENCIDAS' | 'TODAS'>('ACTIVAS');
   const [selectedRange, setSelectedRange] = useState<'30DIAS' | '7DIAS' | 'URGENTES' | 'TODOS'>(
     initial7DaysFilter ? '7DIAS' : '30DIAS'
@@ -78,18 +104,22 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
     return safeLicitaciones.filter((item) => {
       if (!item) return false;
 
-      const hasSearchQuery = Boolean(searchTerm && searchTerm.trim());
+      const hasSearchQuery = Boolean(debouncedSearchTerm && debouncedSearchTerm.trim());
 
-      // Search term filter across ALL fields (id, code, title, buyer, type, etc.)
-      if (hasSearchQuery && !matchesDeepSearch(item, searchTerm)) {
+      // 1. Case-insensitive search on id, nombre, organismo using toLowerCase()
+      if (hasSearchQuery && !matchesSearchTerm(item, debouncedSearchTerm)) {
         return false;
       }
 
-      // If no search query is active, apply status & date range filters
+      // 2. Modality filter directly on `tipo`
+      if (selectedTipo !== 'TODOS' && selectedTipo !== 'Todas' && !matchesTipoExact(item.tipo, selectedTipo)) {
+        return false;
+      }
+
+      // 3. Apply status & date range filters if no search query is typed
       if (!hasSearchQuery) {
         const expired = isItemExpired(item);
 
-        // Status Filter: ACTIVAS, VENCIDAS, TODAS
         if (selectedStatus === 'ACTIVAS' && expired) {
           return false;
         }
@@ -97,7 +127,6 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
           return false;
         }
 
-        // Date Range Filter
         if (selectedRange === '7DIAS' && !item.esUltimos7Dias) {
           return false;
         }
@@ -106,19 +135,14 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
         }
       }
 
-      // Process Type
-      if (selectedTipo !== 'TODOS' && !matchesFlexibleTipo(item.tipo, selectedTipo, item.codigo)) {
-        return false;
-      }
-
-      // Tags filter
+      // 4. Tags filter
       if ((selectedTags || []).length > 0 && !matchesAllTagsDeep(item, selectedTags)) {
         return false;
       }
 
       return true;
     });
-  }, [safeLicitaciones, selectedStatus, searchTerm, selectedTipo, selectedRange, selectedTags]);
+  }, [safeLicitaciones, selectedStatus, debouncedSearchTerm, selectedTipo, selectedRange, selectedTags]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -176,14 +200,9 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
               </span>
               <input
                 type="text"
-                placeholder="Buscar por código, palabra clave, tecnología o cliente..."
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if ((window as any).searchTimeout) clearTimeout((window as any).searchTimeout);
-                  (window as any).searchTimeout = setTimeout(() => {
-                    setSearchTerm(value);
-                  }, 300);
-                }}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por código, título, organismo o palabra clave..."
                 style={{
                   color: '#0f172a',
                   backgroundColor: '#ffffff',
@@ -191,8 +210,16 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
                   WebkitTextFillColor: '#0f172a',
                   opacity: 1
                 }}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
+                className="w-full pl-10 pr-8 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
               />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             <button
@@ -279,23 +306,23 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
             <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center">
               <Filter className="w-3.5 h-3.5 mr-1" /> Tipo:
             </span>
-            {(['TODOS', 'Licitacion', 'Convenio Marco', 'Compra Agil'] as const).map((tipo) => (
+            {(['TODOS', 'Licitación', 'Convenio Marco', 'Compra Ágil'] as const).map((tipo) => (
               <button
                 key={tipo}
                 onClick={() => setSelectedTipo(tipo)}
                 className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-                  selectedTipo === tipo
+                  selectedTipo === tipo || (tipo === 'Licitación' && selectedTipo === 'Licitacion') || (tipo === 'Compra Ágil' && selectedTipo === 'Compra Agil')
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 {tipo === 'TODOS'
-                  ? 'Todos'
-                  : tipo === 'Compra Agil'
+                  ? 'Todas'
+                  : tipo === 'Compra Ágil'
                   ? '⚡ Compra Ágil'
                   : tipo === 'Convenio Marco'
                   ? '🤝 Convenio Marco'
-                  : '📋 Licitaciones'}
+                  : '📋 Licitación'}
               </button>
             ))}
           </div>
@@ -389,7 +416,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
       {/* Grid or Table View */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredLicitaciones.map((item) => {
+          {filteredLicitaciones.slice(0, 100).map((item) => {
             const expired = isItemExpired(item);
             const fc = extractFechaCierre(item) || item.fechaCierre;
             const timeInfo = calculateChileRemainingTime(fc);
@@ -524,7 +551,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
-                {filteredLicitaciones.map((item) => {
+                {filteredLicitaciones.slice(0, 100).map((item) => {
                   const expired = isItemExpired(item);
                   const fc = extractFechaCierre(item) || item.fechaCierre;
                   const timeInfo = calculateChileRemainingTime(fc);

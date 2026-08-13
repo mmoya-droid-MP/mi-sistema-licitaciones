@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Oportunidad } from '../types';
 import { getItemOfficialUrl, cleanOfficialId } from '../lib/dateUtils';
+import { Buscador } from './Buscador';
 
 interface Props {
   oportunidades?: Oportunidad[];
@@ -88,33 +89,13 @@ export const OportunidadesTabla: React.FC<Props> = ({
 
   return (
     <div style={{ width: '100%', backgroundColor: '#0f172a', padding: '16px', borderRadius: '12px', color: '#ffffff' }}>
-      {/* BUSCADOR ULTRA RÁPIDO SIN LATENCIA */}
+      {/* BUSCADOR ULTRA RÁPIDO SIN LATENCIA CON DEBOUNCE LOCAL */}
       <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div className="relative w-full max-w-md">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Buscar por ID, nombre u organismo..."
-            onChange={(e) => {
-              const value = e.target.value;
-              // Cancelar la búsqueda previa para no congelar la pantalla
-              if ((window as any).searchTimeout) clearTimeout((window as any).searchTimeout);
-              
-              // Posponer el filtro pesado 300ms
-              (window as any).searchTimeout = setTimeout(() => {
-                setSearchTerm(value);
-              }, 300);
-            }}
-            style={{
-              color: '#0f172a',
-              backgroundColor: '#ffffff',
-              caretColor: '#0f172a',
-              WebkitTextFillColor: '#0f172a',
-              opacity: 1
-            }}
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-xs"
+          <Buscador
+            onSearchChange={setSearchTerm}
+            placeholder="Buscar por código (ej: 425-37-LP26), nombre u organismo..."
+            className="w-full px-4 py-2 bg-slate-900 text-white border border-slate-700 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs placeholder-slate-400"
           />
         </div>
         <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>

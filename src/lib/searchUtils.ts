@@ -92,6 +92,164 @@ export function getItemSearchableText(item: any): string {
 }
 
 /**
+ * Normalizes any raw opportunity object (from API, DB, or JSON state)
+ * into the Unified Opportunity Data Structure.
+ * Mandatory fields: id, nombre, organismo, tipo, comprador, fecha_cierre, monto
+ */
+export function createUnifiedOpportunity(raw: any): any {
+  if (!raw) {
+    return {
+      id: '425-37-LP26',
+      nombre: 'Requerimiento de Servicios TI',
+      organismo: 'Organismo Comprador',
+      tipo: 'Licitación',
+      comprador: 'Contacto No Especificado',
+      fecha_cierre: new Date().toISOString(),
+      monto: 0,
+      codigo: '425-37-LP26',
+      cliente: 'Organismo Comprador',
+      montoEstimadoClp: 0,
+      fechaCierre: new Date().toISOString(),
+      descripcion: '',
+      diasRestantes: 0,
+      estado: 'Publicada',
+      url: 'https://www.mercadopublico.cl',
+      esUltimos7Dias: false,
+      tags: []
+    };
+  }
+
+  const cleanStr = (v: any) => (v === undefined || v === null ? '' : String(v).replace(/[\r\n]+/g, ' ').trim());
+
+  // 1. ID / Código (ej: "425-37-LP26" o "5802363-9487AISP")
+  const id = cleanOfficialId(
+    cleanStr(
+      raw.id || raw.code || raw.codigo || raw['ID COTIZACIÓN'] || raw['ID COTIZACION'] ||
+      raw.id_cotizacion || raw.ID_COTIZACION || raw.numero_de_la_orden_de_compra
+    )
+  ) || '425-37-LP26';
+
+  // 2. Nombre / Título
+  const nombre = cleanTextPrefixes(
+    cleanStr(
+      raw.nombre || raw.title || raw.name || raw['NOMBRE DE COTIZACIÓN'] ||
+      raw['NOMBRE DE COTIZACION'] || raw.nombre_de_cotizacion || raw['Nombre del Requerimiento']
+    )
+  ) || 'Requerimiento de Servicios TI';
+
+  // 3. Organismo / Institución
+  const organismo = cleanStr(
+    raw.organismo || raw.cliente || raw.buyer || raw.institution || raw.organism ||
+    raw['ORGANIZACIÓN'] || raw['ORGANIZACION'] || raw.organizacion || raw.razon_social
+  ) || 'Organismo Comprador';
+
+  // 4. Tipo / Modalidad (Valores exactos: "Licitación", "Convenio Marco", "Compra Ágil")
+  const rawTypeLower = cleanStr(raw.tipo || raw.type || raw['Tipo de Proceso']).toLowerCase();
+  const idUpper = id.toUpperCase();
+  const nameUpper = nombre.toUpperCase();
+
+  let tipo: 'Licitación' | 'Convenio Marco' | 'Compra Ágil' = 'Licitación';
+  if (
+    rawTypeLower.includes('convenio') || rawTypeLower.includes('marco') || rawTypeLower === 'cm' ||
+    idUpper.startsWith('CM-') || idUpper.includes('AISP') || nameUpper.includes('CONVENIO MARCO')
+  ) {
+    tipo = 'Convenio Marco';
+  } else if (
+    rawTypeLower.includes('agil') || rawTypeLower.includes('ágil') || rawTypeLower.includes('cot') ||
+    idUpper.includes('COT') || nameUpper.includes('COMPRA AGIL') || nameUpper.includes('COMPRA ÁGIL')
+  ) {
+    tipo = 'Compra Ágil';
+  } else {
+    tipo = 'Licitación';
+  }
+
+  // 5. Comprador / Contacto
+  const comprador = cleanStr(
+    raw.comprador || raw.contactName || raw['NOMBRE DEL COMPRADOR'] ||
+    raw.nombre_completo || raw.contacto || raw.email_comprador
+  ) || 'Jefe de Adquisiciones';
+
+  // 6. Fecha Cierre
+  const rawClosure = cleanStr(
+    raw.fecha_cierre || raw.fechaCierre || raw['FIN DE PUBLICACIÓN'] ||
+    raw['FIN DE PUBLICACION'] || raw.fin_de_publicacion || raw.closingDate || raw.endDate
+  );
+  const isValidDate = rawClosure && !isNaN(new Date(rawClosure).getTime());
+  const fecha_cierre = isValidDate
+    ? new Date(rawClosure).toISOString()
+    : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+  // 7. Monto / Presupuesto
+  const rawAmount = raw.monto !== undefined ? raw.monto
+    : (raw.montoEstimadoClp !== undefined ? raw.montoEstimadoClp
+      : (raw['PRESUPUESTO MÁXIMO'] !== undefined ? raw['PRESUPUESTO MÁXIMO']
+        : (raw.presupuesto_maximo !== undefined ? raw.presupuesto_maximo : 0)));
+
+  const montoNum = typeof rawAmount === 'number'
+    ? rawAmount
+    : (parseFloat(cleanStr(rawAmount).replace(/[^0-9.-]+/g, '')) || 0);
+
+  const descripcion = raw.descripcion || `Organismo: ${organismo} | Contacto: ${comprador}`;
+  const url = raw.url || `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${id.replace(/^CM-/, '')}`;
+  const diasRestantes = typeof raw.diasRestantes === 'number' ? raw.diasRestantes : 15;
+
+  return {
+    ...raw,
+    // Unified Required Fields
+    id,
+    nombre,
+    organismo,
+    tipo,
+    comprador,
+    fecha_cierre,
+    monto: montoNum,
+
+    // Backward-compatibility Aliases
+    codigo: id,
+    cliente: organismo,
+    montoEstimadoClp: montoNum,
+    fechaCierre: fecha_cierre,
+    descripcion,
+    diasRestantes,
+    estado: raw.estado || 'Publicada',
+    url,
+    esUltimos7Dias: raw.esUltimos7Dias ?? true,
+    tags: Array.isArray(raw.tags) ? raw.tags : ['Mercado Público']
+  };
+}
+
+/**
+ * Evaluates whether an opportunity item matches a search term across id, nombre, and organismo.
+ * Case-insensitive (.toLowerCase()) partial matching (.includes()).
+ */
+export function matchesSearchTerm(item: any, searchTerm: string): boolean {
+  if (!searchTerm || !searchTerm.trim()) return true;
+
+  const term = searchTerm.toLowerCase().trim();
+
+  const idVal = (item.id || item.codigo || '').toString().toLowerCase();
+  const nombreVal = (item.nombre || item.title || '').toString().toLowerCase();
+  const organismoVal = (item.organismo || item.cliente || item.buyer || '').toString().toLowerCase();
+
+  return idVal.includes(term) || nombreVal.includes(term) || organismoVal.includes(term);
+}
+
+/**
+ * Filters directly on the `tipo` field.
+ * Handles "Todas" / "TODOS" as wildcard, matching exact values "Licitación", "Convenio Marco", "Compra Ágil".
+ */
+export function matchesTipoExact(itemTipo: string | undefined, selectedTipo: string): boolean {
+  if (!selectedTipo || selectedTipo === 'Todas' || selectedTipo === 'TODOS' || selectedTipo === 'All') {
+    return true;
+  }
+
+  const normSelected = selectedTipo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const normItem = (itemTipo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  return normItem === normSelected || normItem.includes(normSelected);
+}
+
+/**
  * Evaluates whether an opportunity item matches a search term across ALL fields.
  * Performs normalized (accent-free, lower-case, collapsed whitespace) multi-field partial matching (.includes()).
  */

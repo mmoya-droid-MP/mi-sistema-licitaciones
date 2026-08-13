@@ -1,4 +1,4 @@
-export type TipoProceso = 'Licitacion' | 'Convenio Marco' | 'Compra Agil' | 'Orden de Compra';
+export type TipoProceso = 'Licitación' | 'Convenio Marco' | 'Compra Ágil' | 'Licitacion' | 'Compra Agil' | 'Orden de Compra';
 
 export const SET_PALABRAS_CLAVE_MASTER = [
   // 1. Google Maps, GIS y Geolocalización
@@ -24,30 +24,39 @@ export const SET_PALABRAS_CLAVE_MASTER = [
 export const SET_PALABRAS_CLAVE = SET_PALABRAS_CLAVE_MASTER;
 
 export interface LicitacionItem {
-  codigo: string;
-  cliente: string;
-  nombre: string;
-  descripcion: string;
-  tipo: TipoProceso;
-  montoEstimadoClp?: number;
-  fechaPublicacion: string; // ISO string or DD/MM/YYYY
-  fechaCierre: string;      // ISO string or YYYY-MM-DD HH:mm
+  // Required Unified Properties
+  id: string;               // e.g. "425-37-LP26" or "5802363-9487AISP"
+  nombre: string;           // Requirement title
+  organismo: string;        // Institution name
+  tipo: TipoProceso;        // "Licitación" | "Convenio Marco" | "Compra Ágil"
+  comprador: string;        // Buyer contact name
+  fecha_cierre: string;     // Closing date
+  monto: number | string;   // Amount
+
+  // Backward compatibility aliases
+  codigo: string;           // Alias for id
+  cliente: string;          // Alias for organismo
+  montoEstimadoClp?: number;// Alias for monto
+  fechaCierre: string;      // Alias for fecha_cierre
+  descripcion?: string;
+  fechaPublicacion?: string;
   fechaPreguntas?: string;
   fechaRespuestas?: string;
   fechaAdjudicacion?: string;
-  diasRestantes: number;
-  estado: string;
-  url: string;
+  diasRestantes?: number;
+  estado?: string;
+  url?: string;
   prioritario?: boolean;
-  esUltimos7Dias: boolean;
-  tags: string[];
+  esUltimos7Dias?: boolean;
+  tags?: string[];
   materia?: string;
   region?: string;
-  fechaActualizada?: boolean; // indicates key date updated
+  fechaActualizada?: boolean;
   FechaCierreRecepcionOfertas?: string;
   FechaCierreOficial?: string;
   FechaFinPublicacion?: string;
   FechaCierreCotizacion?: string;
+  [key: string]: any;
 }
 
 export type EstadoPostulacion = 'Interes' | 'TDR' | 'Preparando' | 'Enviada' | 'Adjudicada' | 'Desestimada';
@@ -121,9 +130,13 @@ export interface Oportunidad {
   id: string;
   nombre: string;
   organismo: string;
-  tipo: TipoProceso | string;
-  diasRestantes?: number;
+  comprador: string;
+  tipo: 'Licitación' | 'Convenio Marco' | 'Compra Ágil';
+  fecha_cierre: string;
+  monto: string | number;
+  codigo?: string;
   url?: string;
+  diasRestantes?: number;
   [key: string]: any;
 }
 

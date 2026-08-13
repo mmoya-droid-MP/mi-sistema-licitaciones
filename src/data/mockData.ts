@@ -1,7 +1,7 @@
 import { LicitacionItem, Postulacion, AlertaRule, AlertaNotificacion, SET_PALABRAS_CLAVE_MASTER, OrdenCompraItem } from '../types';
-import { cleanTextPrefixes } from '../lib/searchUtils';
+import { cleanTextPrefixes, createUnifiedOpportunity } from '../lib/searchUtils';
 
-const SEED_LICITACIONES: LicitacionItem[] = [
+const SEED_LICITACIONES_RAW = [
   {
     codigo: "5802363-9487AISP",
     cliente: "SUBSECRETARÍA DEL MINISTERIO DE HACIENDA",
@@ -194,6 +194,8 @@ const SEED_LICITACIONES: LicitacionItem[] = [
   }
 ];
 
+const SEED_LICITACIONES: LicitacionItem[] = SEED_LICITACIONES_RAW.map(createUnifiedOpportunity);
+
 // Helper to generate a full dynamic catalog of 520 realistic Mercado Público records covering 30 days
 function generateFull500PlusCatalog(): LicitacionItem[] {
   const organismos = [
@@ -278,7 +280,7 @@ function generateFull500PlusCatalog(): LicitacionItem[] {
     }
   ];
 
-  const items: LicitacionItem[] = [...SEED_LICITACIONES];
+  const items: any[] = [...SEED_LICITACIONES];
 
   // Base date fixed around current date: 2026-08-08
   const baseTimestamp = new Date("2026-08-08T12:00:00").getTime();
@@ -341,7 +343,7 @@ function generateFull500PlusCatalog(): LicitacionItem[] {
     });
   }
 
-  return items;
+  return items.map(createUnifiedOpportunity);
 }
 
 export const INITIAL_LICITACIONES: LicitacionItem[] = generateFull500PlusCatalog();
