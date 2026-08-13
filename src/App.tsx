@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { LicitacionesRadarView } from './components/LicitacionesRadarView';
@@ -19,7 +19,7 @@ import {
   INITIAL_NOTIFICACIONES,
   INITIAL_ORDENES_COMPRA
 } from './data/mockData';
-import { LicitacionItem, Postulacion, AlertaRule, AlertaNotificacion, OrdenCompraItem } from './types';
+import { LicitacionItem, Postulacion, AlertaRule, AlertaNotificacion, OrdenCompraItem, TipoProceso } from './types';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts'>('dashboard');
@@ -39,6 +39,42 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [radarFilter7Days, setRadarFilter7Days] = useState(false);
+
+  // Consultar la API /api/opportunities al montar el componente para actualizar licitaciones
+  useEffect(() => {
+    const fetchOpportunities = async () => {
+      try {
+        const res = await fetch('/api/opportunities');
+        if (res.ok) {
+          const json = await res.json();
+          const rawItems = Array.isArray(json) ? json : (json.data || json.opportunities || []);
+          if (Array.isArray(rawItems) && rawItems.length > 0) {
+            const mappedLicitaciones: LicitacionItem[] = rawItems.map((opp: any) => ({
+              codigo: opp.code || opp.id || 'S/I',
+              cliente: opp.buyer || opp.organism || opp.institution || 'Organismo Comprador',
+              nombre: opp.title || opp.name || 'Orden de Compra',
+              descripcion: `Organismo: ${opp.organism || opp.buyer || ''} | Unidad: ${opp.institution || ''} | Contacto: ${opp.contactName || ''} (${opp.contactRole || ''}) - Email: ${opp.contactEmail || ''} - Tel: ${opp.contactPhone || ''} - Comuna: ${opp.location || ''}`,
+              tipo: (opp.type as TipoProceso) || 'Orden de Compra',
+              montoEstimadoClp: opp.amount || 0,
+              fechaPublicacion: opp.closingDate || opp.endDate || new Date().toISOString(),
+              fechaCierre: opp.closingDate || opp.endDate || new Date().toISOString(),
+              diasRestantes: 5,
+              estado: opp.status || 'Publicada',
+              url: `https://www.mercadopublico.cl/BuscarLicitacion?codigo=${opp.code || opp.id}`,
+              esUltimos7Dias: true,
+              tags: ['Mercado Público', opp.location].filter(Boolean) as string[],
+              region: opp.location
+            }));
+            setLicitaciones(mappedLicitaciones);
+          }
+        }
+      } catch (err) {
+        console.warn("Error cargando oportunidades desde /api/opportunities:", err);
+      }
+    };
+
+    fetchOpportunities();
+  }, []);
 
   const handleOpenReportsModal = (type?: string, data?: any[]) => {
     setReportData(data);

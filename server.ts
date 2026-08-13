@@ -264,6 +264,203 @@ app.post("/api/postulaciones", (req, res) => {
 });
 
 // ==========================================
+// OPPORTUNITIES / ÓRDENES DE COMPRA API
+// ==========================================
+const OPPORTUNITIES_FILE = path.join(process.cwd(), "opportunities.json");
+
+const SEED_OPPORTUNITIES = [
+  {
+    numero_de_la_orden_de_compra: "OC-5802363-9800",
+    nombre_de_la_orden_de_compra: "Servicio de Desarrollo e Integración de Visor Geográfico Google Maps API",
+    razon_social: "Carabineros de Chile - Dirección de Logística",
+    unidad_de_compra: "Departamento de Tecnologías de la Información",
+    nombre_completo: "Capitán Jorge Morales",
+    e_mail_usuario: "jmorales@carabineros.cl",
+    fono_usuario: "+56 2 2922 4000",
+    cargo: "Jefe de Proyecto TI",
+    comuna: "Santiago",
+    total_oc: 45000000,
+    neto_clp: 37815126
+  },
+  {
+    numero_de_la_orden_de_compra: "OC-6110100-4521",
+    nombre_de_la_orden_de_compra: "Adquisición Licencias Cloud GCP y Soporte Evolutivo BI",
+    razon_social: "Hospital San José - SSMN",
+    unidad_de_compra: "Unidad de Informática Médica",
+    nombre_completo: "Dr. Roberto Silva",
+    e_mail_usuario: "rsilva@hospitalsanjose.cl",
+    fono_usuario: "+56 2 2384 5000",
+    cargo: "Subdirector de Gestión de Suministros",
+    comuna: "Independencia",
+    total_oc: 28500000,
+    neto_clp: 23949580
+  },
+  {
+    numero_de_la_orden_de_compra: "OC-6907030-1120",
+    nombre_de_la_orden_de_compra: "Plataforma de Gestor Documental y Firma Digital Avanzada",
+    razon_social: "Ilustre Municipalidad de Santiago",
+    unidad_de_compra: "Dirección de Operaciones y Adquisiciones",
+    nombre_completo: "Marcelo Contreras",
+    e_mail_usuario: "mcontreras@munistgo.cl",
+    fono_usuario: "+56 2 2713 6000",
+    cargo: "Encargado de Compras Públicas",
+    comuna: "Santiago",
+    total_oc: 18000000,
+    neto_clp: 15126050
+  },
+  {
+    numero_de_la_orden_de_compra: "OC-6120000-8890",
+    nombre_de_la_orden_de_compra: "Desarrollo de App Móvil y Sistema de Reportes de Seguridad",
+    razon_social: "Fuerza Aérea de Chile",
+    unidad_de_compra: "Comando Logístico FACH",
+    nombre_completo: "Andrea Fuentealba",
+    e_mail_usuario: "afuentealba@fach.mil.cl",
+    fono_usuario: "+56 2 2922 4015",
+    cargo: "Analista de Sistemas",
+    comuna: "Cerrillos",
+    total_oc: 32000000,
+    neto_clp: 26890756
+  },
+  {
+    numero_de_la_orden_de_compra: "OC-6130200-3341",
+    nombre_de_la_orden_de_compra: "Servicio de Consultoría Ciberseguridad y Auditoría SecOps",
+    razon_social: "Ministerio de Obras Públicas - Vialidad",
+    unidad_de_compra: "Dirección de Transformación Digital",
+    nombre_completo: "Loreto Araya",
+    e_mail_usuario: "loreto.araya@mop.gov.cl",
+    fono_usuario: "+56 32 226 1000",
+    cargo: "Jefa de Proyectos Licitados",
+    comuna: "Valparaíso",
+    total_oc: 55000000,
+    neto_clp: 46218487
+  }
+];
+
+function mapOpportunityRecord(r: any) {
+  const getVal = (keys: string[]): string => {
+    for (const k of keys) {
+      if (r[k] !== undefined && r[k] !== null) {
+        const val = String(r[k]).trim();
+        if (val) return val;
+      }
+    }
+    return '';
+  };
+
+  const idVal = getVal(['numero_de_la_orden_de_compra', 'numero_orden_compra', 'code', 'codigo', 'id']);
+  const codeVal = idVal;
+  const titleVal = getVal(['nombre_de_la_orden_de_compra', 'nombre_orden_compra', 'title', 'nombre', 'name']);
+  const nameVal = titleVal;
+  const buyerVal = getVal(['razon_social', 'unidad_de_compra', 'buyer', 'organismo', 'comprador', 'organism', 'institution']);
+  const organismVal = getVal(['razon_social', 'organismo', 'organism', 'unidad_de_compra']) || buyerVal;
+  const institutionVal = getVal(['unidad_de_compra', 'razon_social', 'institucion', 'institution']) || buyerVal;
+  const contactNameVal = getVal(['nombre_completo', 'contactName', 'contacto', 'nombre_contacto']);
+  const contactEmailVal = getVal(['e_mail_usuario', 'email_usuario', 'contactEmail', 'correo', 'email']);
+  const contactPhoneVal = getVal(['fono_usuario', 'telefono_usuario', 'contactPhone', 'telefono', 'fono']);
+  const contactRoleVal = getVal(['cargo', 'contactRole', 'cargo_usuario']);
+  const locationVal = getVal(['comuna', 'location', 'ciudad', 'region']);
+  const typeVal = getVal(['tipo', 'type']) || 'Orden de Compra';
+  const statusVal = getVal(['estado', 'status', 'estado_oc']) || 'Aceptada';
+
+  const rawAmount = r.total_oc !== undefined && r.total_oc !== null && String(r.total_oc).trim() !== ''
+    ? r.total_oc
+    : (r.neto_clp !== undefined && r.neto_clp !== null && String(r.neto_clp).trim() !== '' ? r.neto_clp : (r.amount || r.monto || 0));
+
+  const parsedAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/[^0-9.-]+/g, '')) || 0;
+
+  const closingDateVal = getVal(['fecha_de_creacion', 'fecha_creacion', 'closingDate', 'fechaCierre', 'endDate']) || new Date().toISOString();
+  const endDateVal = getVal(['fecha_de_entrega', 'endDate', 'fechaCierre', 'closingDate']) || closingDateVal;
+
+  return {
+    id: idVal || `OC-${Math.floor(Math.random() * 1000000)}`,
+    code: codeVal || `OC-${Math.floor(Math.random() * 1000000)}`,
+    title: titleVal || 'Orden de Compra Mercado Público',
+    name: nameVal || 'Orden de Compra Mercado Público',
+    buyer: buyerVal || 'Organismo Público',
+    organism: organismVal || 'Organismo Público',
+    institution: institutionVal || 'Organismo Público',
+    contactName: contactNameVal || 'Contacto Registrado',
+    contactEmail: contactEmailVal || 'contacto@mercadopublico.cl',
+    contactPhone: contactPhoneVal || '+56 2 2000 0000',
+    contactRole: contactRoleVal || 'Encargado de Adquisiciones',
+    location: locationVal || 'Santiago',
+    type: typeVal,
+    closingDate: closingDateVal,
+    endDate: endDateVal,
+    status: statusVal,
+    amount: parsedAmount
+  };
+}
+
+function readOpportunitiesData(): any[] {
+  if (fs.existsSync(OPPORTUNITIES_FILE)) {
+    try {
+      const raw = fs.readFileSync(OPPORTUNITIES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(mapOpportunityRecord);
+      }
+    } catch (e) {
+      console.warn("⚠️ Error leyendo opportunities.json");
+    }
+  }
+  return SEED_OPPORTUNITIES.map(mapOpportunityRecord);
+}
+
+function writeOpportunitiesData(data: any[]) {
+  try {
+    fs.writeFileSync(OPPORTUNITIES_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error("❌ Error guardando opportunities.json:", e);
+  }
+}
+
+// GET /api/opportunities - Devuelve la lista mapeada de oportunidades / órdenes de compra
+app.get("/api/opportunities", (_req, res) => {
+  try {
+    const list = readOpportunitiesData();
+    return res.json({
+      success: true,
+      count: list.length,
+      data: list
+    });
+  } catch (err: any) {
+    console.error("❌ Error en GET /api/opportunities:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/opportunities/upload - Carga de CSV / Excel de Oportunidades
+app.post("/api/opportunities/upload", upload.single("file"), (req, res) => {
+  try {
+    let rows: any[] = [];
+    if (req.file) {
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      rows = XLSX.utils.sheet_to_json(worksheet);
+    } else if (Array.isArray(req.body?.records)) {
+      rows = req.body.records;
+    } else {
+      return res.status(400).json({ success: false, error: "No se enviaron datos válidos." });
+    }
+
+    const mapped = rows.map(mapOpportunityRecord);
+    writeOpportunitiesData(mapped);
+
+    return res.json({
+      success: true,
+      message: `Se cargaron ${mapped.length} oportunidades con éxito.`,
+      count: mapped.length,
+      data: mapped
+    });
+  } catch (err: any) {
+    console.error("❌ Error en POST /api/opportunities/upload:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
 // DIRECTORIO DE COMPRADORES & CONTACTOS API
 // ==========================================
 const COMPRADORES_FILE = path.join(process.cwd(), "compradores.json");
