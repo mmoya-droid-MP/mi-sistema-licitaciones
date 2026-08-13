@@ -3,6 +3,27 @@ import { cleanTextPrefixes } from '../lib/searchUtils';
 
 const SEED_LICITACIONES: LicitacionItem[] = [
   {
+    codigo: "5802363-9487AISP",
+    cliente: "SUBSECRETARÍA DEL MINISTERIO DE HACIENDA",
+    nombre: cleanTextPrefixes("Servicio de Integración Google Maps Platform, Visor Geográfico & GCP"),
+    descripcion: cleanTextPrefixes("Organismo: Subsecretaría del Ministerio de Hacienda | Contacto: María Elena Fuentes (Jefa de Unidad Digital) - Email: mfuentes@hacienda.cl - Tel: +56 2 2828 1000 - Comuna: Santiago"),
+    tipo: "Convenio Marco",
+    montoEstimadoClp: 45000000,
+    fechaPublicacion: "2026-08-01T10:00:00",
+    fechaCierre: "2026-08-28T18:00:00",
+    FechaFinPublicacion: "2026-08-28 18:00:00",
+    FechaCierreCotizacion: "2026-08-28 18:00:00",
+    diasRestantes: 15,
+    estado: "Publicada",
+    url: "https://www.mercadopublico.cl/BuscarLicitacion?codigo=5802363-9487AISP",
+    prioritario: true,
+    esUltimos7Dias: true,
+    tags: ["google maps", "visor geografico", "gcp", "convenio marco", "hacienda"],
+    materia: "Servicios de Tecnologías de la Información",
+    region: "Región Metropolitana de Santiago",
+    fechaActualizada: true,
+  },
+  {
     codigo: "587-32-LE26",
     cliente: "MINISTERIO DE VIVIENDA Y URBANISMO (MINVU)",
     nombre: cleanTextPrefixes("Desarrollo e Interoperabilidad de Plataforma GIS y Geolocalización en Nube GCP"),
