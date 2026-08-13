@@ -77,31 +77,37 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
   const filteredLicitaciones = useMemo(() => {
     return safeLicitaciones.filter((item) => {
       if (!item) return false;
-      const expired = isItemExpired(item);
 
-      // Status Filter: ACTIVAS, VENCIDAS, TODAS
-      if (selectedStatus === 'ACTIVAS' && expired) {
-        return false;
-      }
-      if (selectedStatus === 'VENCIDAS' && !expired) {
+      const hasSearchQuery = Boolean(searchTerm && searchTerm.trim());
+
+      // Search term filter across ALL fields (id, code, title, buyer, type, etc.)
+      if (hasSearchQuery && !matchesDeepSearch(item, searchTerm)) {
         return false;
       }
 
-      // Search term
-      if (searchTerm.trim() && !matchesDeepSearch(item, searchTerm)) {
-        return false;
+      // If no search query is active, apply status & date range filters
+      if (!hasSearchQuery) {
+        const expired = isItemExpired(item);
+
+        // Status Filter: ACTIVAS, VENCIDAS, TODAS
+        if (selectedStatus === 'ACTIVAS' && expired) {
+          return false;
+        }
+        if (selectedStatus === 'VENCIDAS' && !expired) {
+          return false;
+        }
+
+        // Date Range Filter
+        if (selectedRange === '7DIAS' && !item.esUltimos7Dias) {
+          return false;
+        }
+        if (selectedRange === 'URGENTES' && (expired || (item.diasRestantes ?? 99) > 3)) {
+          return false;
+        }
       }
 
       // Process Type
       if (selectedTipo !== 'TODOS' && !matchesFlexibleTipo(item.tipo, selectedTipo, item.codigo)) {
-        return false;
-      }
-
-      // Date Range Filter
-      if (selectedRange === '7DIAS' && !item.esUltimos7Dias) {
-        return false;
-      }
-      if (selectedRange === 'URGENTES' && (expired || (item.diasRestantes ?? 99) > 3)) {
         return false;
       }
 

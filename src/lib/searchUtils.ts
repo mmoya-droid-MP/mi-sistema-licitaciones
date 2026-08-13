@@ -19,67 +19,103 @@ export function cleanTextPrefixes(text: string): string {
 }
 
 /**
- * Normalizes text by converting to lower case and stripping diacritics/accents.
- * E.g., "gestión" -> "gestion", "Ágil" -> "agil", "GESTIÓN" -> "gestion".
+ * Normalizes text by converting to lower case, stripping diacritics/accents,
+ * and collapsing multiple spaces.
+ * E.g., "gestión  425-37-LP26" -> "gestion 425-37-lp26"
  */
 export function normalizeText(text: string): string {
   if (!text) return '';
   return text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
  * Builds the full searchable text representation of an opportunity item.
- * Includes: [Código ID] + [Nombre] + [Organismo Comprador] + [Descripción / Ficha Técnica] + [Materia] + [Región] + [Tags]
+ * Gathers ALL fields (id, code/codigo, title/nombre, buyer/organism/organizacion, type/tipo, etc.)
  */
-export function getItemSearchableText(item: {
-  codigo?: string;
-  nombre?: string;
-  cliente?: string;
-  organismo?: string;
-  descripcion?: string;
-  materia?: string;
-  region?: string;
-  tags?: string[];
-  [key: string]: any;
-}): string {
+export function getItemSearchableText(item: any): string {
+  if (!item || typeof item !== 'object') return '';
+
   const rawParts = [
-    item.codigo || item.id || item.code || item['ID COTIZACIÓN'] || item['ID COTIZACION'] || item.id_cotizacion || '',
-    item.nombre || item.title || item['NOMBRE DE COTIZACIÓN'] || item['NOMBRE DE COTIZACION'] || item.nombre_de_cotizacion || '',
-    item.cliente || item.organismo || item.buyer || item['ORGANIZACIÓN'] || item['ORGANIZACION'] || item.organizacion || item.razon_social || '',
-    item.contactName || item['NOMBRE DEL COMPRADOR'] || item.nombre_completo || '',
-    item.descripcion || '',
-    item.materia || '',
-    item.region || item.location || item.comuna || '',
-    item.tags ? item.tags.join(' ') : ''
+    // 1. ID & Code / Código
+    item.id,
+    item.code,
+    item.codigo,
+    item.codigoId,
+    item['ID COTIZACIÓN'],
+    item['ID COTIZACION'],
+    item.id_cotizacion,
+    item['Código ID'],
+    item['Codigo ID'],
+    item.numero_de_la_orden_de_compra,
+
+    // 2. Title & Nombre
+    item.title,
+    item.nombre,
+    item['NOMBRE DE COTIZACIÓN'],
+    item['NOMBRE DE COTIZACION'],
+    item.nombre_de_cotizacion,
+    item['Nombre del Requerimiento'],
+
+    // 3. Buyer & Organism & Organización & Cliente
+    item.buyer,
+    item.organism,
+    item.organizacion,
+    item.cliente,
+    item['ORGANIZACIÓN'],
+    item['ORGANIZACION'],
+    item.razon_social,
+    item.institution,
+
+    // 4. Type & Tipo
+    item.type,
+    item.tipo,
+    item['Tipo de Proceso'],
+
+    // 5. Contacto, Descripción, Materia, Región, Tags
+    item.contactName,
+    item['NOMBRE DEL COMPRADOR'],
+    item.descripcion,
+    item.description,
+    item.materia,
+    item.region,
+    item.location,
+    item.comuna,
+    Array.isArray(item.tags) ? item.tags.join(' ') : item.tags
   ];
-  return normalizeText(rawParts.join(' '));
+
+  return normalizeText(rawParts.filter(Boolean).map(String).join(' '));
 }
 
 /**
- * Evaluates whether an opportunity item matches a search term across its full text.
- * Performs normalized (accent-free, lower-case) matching.
+ * Evaluates whether an opportunity item matches a search term across ALL fields.
+ * Performs normalized (accent-free, lower-case, collapsed whitespace) multi-field partial matching (.includes()).
  */
 export function matchesDeepSearch(
-  item: {
-    codigo?: string;
-    nombre?: string;
-    cliente?: string;
-    organismo?: string;
-    descripcion?: string;
-    materia?: string;
-    region?: string;
-    tags?: string[];
-    [key: string]: any;
-  },
+  item: any,
   searchTerm: string
 ): boolean {
   if (!searchTerm || !searchTerm.trim()) return true;
-  const normalizedQuery = normalizeText(searchTerm.trim());
+
+  // 1. Normalización del término de búsqueda
+  const queryNorm = normalizeText(searchTerm);
+  if (!queryNorm) return true;
+
+  // 2. Extracción de texto consolidado de todos los campos
   const fullText = getItemSearchableText(item);
-  return fullText.includes(normalizedQuery);
+
+  // 3. Coincidencia Parcial mediante .includes()
+  if (fullText.includes(queryNorm)) {
+    return true;
+  }
+
+  // 4. Coincidencia flexible por palabras/tokens individuales (ej: "425-37 lp26" o "minvu 425-37")
+  const tokens = queryNorm.split(' ').filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => fullText.includes(token));
 }
 
 /**

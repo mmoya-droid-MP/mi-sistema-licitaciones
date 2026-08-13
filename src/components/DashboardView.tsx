@@ -73,17 +73,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const montoTotalLicitado = useMemo(() => activas.reduce((acc, curr) => acc + (curr?.montoEstimadoClp || 0), 0), [activas]);
 
-  // Filter table items by tableStatus
+  // Filter table items by tableStatus, search query (multi-campo, coincidencia parcial) and tipo
   const filteredTableItems = useMemo(() => {
     return safeLicitaciones.filter((item) => {
       if (!item) return false;
-      const expired = isItemExpired(item);
-      if (tableStatus === 'ACTIVAS' && expired) return false;
-      if (tableStatus === 'VENCIDAS' && !expired) return false;
 
-      if (tableSearch.trim() && !matchesDeepSearch(item, tableSearch)) {
+      // Search term filter: multi-campo, coincidencia parcial (.includes)
+      const hasSearchQuery = Boolean(tableSearch && tableSearch.trim());
+      if (hasSearchQuery && !matchesDeepSearch(item, tableSearch)) {
         return false;
       }
+
+      // If no search query is active, enforce the selected status tab (ACTIVAS vs VENCIDAS)
+      if (!hasSearchQuery) {
+        const expired = isItemExpired(item);
+        if (tableStatus === 'ACTIVAS' && expired) return false;
+        if (tableStatus === 'VENCIDAS' && !expired) return false;
+      }
+
+      // Process type filter (Licitación, Convenio Marco, Compra Ágil)
       if (tableTipo !== 'TODOS' && !matchesFlexibleTipo(item.tipo, tableTipo, item.codigo)) {
         return false;
       }
