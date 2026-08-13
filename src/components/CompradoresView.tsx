@@ -36,6 +36,7 @@ export interface CompradorItem {
   id: number;
   rut_organismo: string;
   nombre_organismo: string;
+  unidad_compra?: string;
   region: string;
   ciudad: string;
   contactos?: ContactoComprador[];
@@ -64,8 +65,13 @@ export const CompradoresView: React.FC = () => {
   const [buyerForm, setBuyerForm] = useState({
     rut_organismo: '',
     nombre_organismo: '',
+    unidadCompra: '',
     region: 'Región Metropolitana de Santiago',
-    ciudad: 'Santiago'
+    ciudad: 'Santiago',
+    nombreContacto: '',
+    cargoContacto: '',
+    telefonoContacto: '',
+    emailContacto: ''
   });
 
   // Form state - Add Contact
@@ -318,7 +324,17 @@ export const CompradoresView: React.FC = () => {
       if (json.success) {
         showToast('Comprador registrado exitosamente.');
         setShowAddBuyerModal(false);
-        setBuyerForm({ rut_organismo: '', nombre_organismo: '', region: 'Región Metropolitana de Santiago', ciudad: 'Santiago' });
+        setBuyerForm({
+          rut_organismo: '',
+          nombre_organismo: '',
+          unidadCompra: '',
+          region: 'Región Metropolitana de Santiago',
+          ciudad: 'Santiago',
+          nombreContacto: '',
+          cargoContacto: '',
+          telefonoContacto: '',
+          emailContacto: ''
+        });
         fetchBuyers(1, searchQuery);
       } else {
         showToast(json.error || 'No se pudo crear el comprador.', 'error');
@@ -598,6 +614,11 @@ export const CompradoresView: React.FC = () => {
                         <div className="font-bold text-slate-900 text-sm leading-snug">
                           {buyer.nombre_organismo}
                         </div>
+                        {buyer.unidad_compra && (
+                          <div className="text-[11px] font-semibold text-blue-600">
+                            Unidad de Compra: {buyer.unidad_compra}
+                          </div>
+                        )}
                         <div className="inline-flex items-center space-x-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-mono text-[11px] font-semibold border border-slate-200">
                           <span>RUT: {buyer.rut_organismo}</span>
                         </div>
@@ -742,63 +763,138 @@ export const CompradoresView: React.FC = () => {
 
       {/* MODAL: Nuevo Comprador */}
       {showAddBuyerModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 relative animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 relative my-8 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center space-x-2 text-slate-900 font-bold text-base">
                 <Building2 className="w-5 h-5 text-blue-600" />
                 <span>Registrar Nuevo Comprador</span>
               </div>
-              <button onClick={() => setShowAddBuyerModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowAddBuyerModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddBuyerSubmit} className="space-y-4 text-xs font-medium text-slate-700">
-              <div>
-                <label className="block mb-1 font-bold">RUT Organismo (con puntos y guión)*</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ej. 60.511.000-7"
-                  value={buyerForm.rut_organismo}
-                  onChange={(e) => setBuyerForm({ ...buyerForm, rut_organismo: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
+            <form onSubmit={handleAddBuyerSubmit} className="space-y-5 text-xs font-medium text-slate-700">
+              {/* Sección 1: Datos del Organismo */}
+              <div className="space-y-3.5">
+                <div className="flex items-center space-x-2 text-blue-900 font-bold text-xs uppercase tracking-wider bg-blue-50/80 px-3 py-1.5 rounded-lg border border-blue-100">
+                  <Building className="w-4 h-4 text-blue-600" />
+                  <span>1. Datos de la Institución / Organismo</span>
+                </div>
 
-              <div>
-                <label className="block mb-1 font-bold">Nombre del Organismo Público*</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ej. Carabineros de Chile - Dirección de Logística"
-                  value={buyerForm.nombre_organismo}
-                  onChange={(e) => setBuyerForm({ ...buyerForm, nombre_organismo: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1 font-bold text-slate-700">RUT Organismo (con puntos y guión)*</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ej. 60.511.000-7"
+                      value={buyerForm.rut_organismo}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, rut_organismo: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-bold">Región</label>
-                  <input
-                    type="text"
-                    placeholder="ej. Región Metropolitana"
-                    value={buyerForm.region}
-                    onChange={(e) => setBuyerForm({ ...buyerForm, region: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
+                  <div>
+                    <label className="block mb-1 font-bold text-slate-700">Unidad de Compra</label>
+                    <input
+                      type="text"
+                      placeholder="ej. Departamento de Adquisiciones"
+                      value={buyerForm.unidadCompra}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, unidadCompra: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block mb-1 font-bold">Ciudad / Comuna</label>
+                  <label className="block mb-1 font-bold text-slate-700">Nombre del Organismo Público*</label>
                   <input
                     type="text"
-                    placeholder="ej. Santiago"
-                    value={buyerForm.ciudad}
-                    onChange={(e) => setBuyerForm({ ...buyerForm, ciudad: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    required
+                    placeholder="ej. Carabineros de Chile - Dirección de Logística"
+                    value={buyerForm.nombre_organismo}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, nombre_organismo: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1 font-bold text-slate-700">Región</label>
+                    <input
+                      type="text"
+                      placeholder="ej. Región Metropolitana de Santiago"
+                      value={buyerForm.region}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, region: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 font-bold text-slate-700">Ciudad / Comuna</label>
+                    <input
+                      type="text"
+                      placeholder="ej. Santiago"
+                      value={buyerForm.ciudad}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, ciudad: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 2: Datos de Contacto */}
+              <div className="space-y-3.5 pt-2 border-t border-slate-100">
+                <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs uppercase tracking-wider bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                  <UserCheck className="w-4 h-4 text-emerald-600" />
+                  <span>2. Datos de Contacto (Mercado Público)</span>
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-bold text-slate-700">Nombre Completo del Contacto</label>
+                  <input
+                    type="text"
+                    placeholder="ej. Capitán Jorge Morales"
+                    value={buyerForm.nombreContacto}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, nombreContacto: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1 font-bold text-slate-700">Cargo del Usuario</label>
+                    <input
+                      type="text"
+                      placeholder="ej. Jefe de Licitaciones"
+                      value={buyerForm.cargoContacto}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, cargoContacto: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 font-bold text-slate-700">Teléfono del Usuario</label>
+                    <input
+                      type="text"
+                      placeholder="ej. +56 2 2922 4000"
+                      value={buyerForm.telefonoContacto}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, telefonoContacto: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-bold text-slate-700">Correo Electrónico</label>
+                  <input
+                    type="email"
+                    placeholder="ej. jmorales@carabineros.cl"
+                    value={buyerForm.emailContacto}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, emailContacto: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
                   />
                 </div>
               </div>
@@ -807,14 +903,14 @@ export const CompradoresView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddBuyerModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-bold hover:bg-slate-50"
+                  className="px-4 py-2.5 border border-slate-300 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md disabled:opacity-50 flex items-center space-x-1.5 transition"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>Guardar Comprador</span>

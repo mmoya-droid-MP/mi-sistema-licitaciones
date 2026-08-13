@@ -946,7 +946,7 @@ app.get("/api/compradores", async (req, res) => {
 // POST /api/compradores - Agregar Comprador Manualmente
 app.post("/api/compradores", async (req, res) => {
   try {
-    const { rut_organismo, nombre_organismo, region, ciudad } = req.body || {};
+    const { rut_organismo, nombre_organismo, region, ciudad, unidadCompra, unidad_compra, nombreContacto, cargoContacto, telefonoContacto, emailContacto } = req.body || {};
 
     if (!rut_organismo || !nombre_organismo) {
       return res.status(400).json({ success: false, error: "El RUT y Nombre de la organización son obligatorios." });
@@ -956,18 +956,42 @@ app.post("/api/compradores", async (req, res) => {
     const cleanNombre = String(nombre_organismo).trim();
     const cleanRegion = String(region || "Sin Región").trim();
     const cleanCiudad = String(ciudad || "Sin Ciudad").trim();
+    const cleanUnidad = String(unidadCompra || unidad_compra || "").trim();
+
+    const contactNombre = String(nombreContacto || "").trim();
+    const contactCargo = String(cargoContacto || "").trim();
+    const contactTelefono = String(telefonoContacto || "").trim();
+    const contactEmail = String(emailContacto || "").trim();
 
     if (pool) {
+      await pool.query(`ALTER TABLE compradores ADD COLUMN IF NOT EXISTS unidad_compra VARCHAR(255)`).catch(() => {});
+
       const sql = `
-        INSERT INTO compradores (rut_organismo, nombre_organismo, region, ciudad)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO compradores (rut_organismo, nombre_organismo, region, ciudad, unidad_compra)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (rut_organismo)
-        DO UPDATE SET nombre_organismo = EXCLUDED.nombre_organismo, region = EXCLUDED.region, ciudad = EXCLUDED.ciudad
+        DO UPDATE SET nombre_organismo = EXCLUDED.nombre_organismo, region = EXCLUDED.region, ciudad = EXCLUDED.ciudad, unidad_compra = EXCLUDED.unidad_compra
         RETURNING *;
       `;
-      const result = await pool.query(sql, [cleanRut, cleanNombre, cleanRegion, cleanCiudad]);
+      const result = await pool.query(sql, [cleanRut, cleanNombre, cleanRegion, cleanCiudad, cleanUnidad]);
       const created = result.rows[0];
       created.contactos = [];
+
+      if (contactNombre || contactEmail || contactTelefono || contactCargo) {
+        const contactSql = `
+          INSERT INTO contactos_comprador (comprador_id, nombre, cargo, correo, telefono)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING *;
+        `;
+        const cRes = await pool.query(contactSql, [
+          created.id,
+          contactNombre || "Contacto Institucional",
+          contactCargo,
+          contactEmail,
+          contactTelefono
+        ]);
+        created.contactos.push(cRes.rows[0]);
+      }
 
       return res.json({ success: true, message: "Comprador registrado exitosamente.", data: created });
     } else {
@@ -979,6 +1003,7 @@ app.post("/api/compradores", async (req, res) => {
         currentLocal[existingIdx].nombre_organismo = cleanNombre;
         currentLocal[existingIdx].region = cleanRegion;
         currentLocal[existingIdx].ciudad = cleanCiudad;
+        if (cleanUnidad) currentLocal[existingIdx].unidad_compra = cleanUnidad;
         created = currentLocal[existingIdx];
       } else {
         created = {
@@ -987,10 +1012,25 @@ app.post("/api/compradores", async (req, res) => {
           nombre_organismo: cleanNombre,
           region: cleanRegion,
           ciudad: cleanCiudad,
+          unidad_compra: cleanUnidad,
           contactos: [],
           created_at: new Date().toISOString()
         };
         currentLocal.unshift(created);
+      }
+
+      if (contactNombre || contactEmail || contactTelefono || contactCargo) {
+        if (!Array.isArray(created.contactos)) created.contactos = [];
+        const newC = {
+          id: Date.now() + 1,
+          comprador_id: created.id,
+          nombre: contactNombre || "Contacto Institucional",
+          cargo: contactCargo,
+          correo: contactEmail,
+          telefono: contactTelefono,
+          created_at: new Date().toISOString()
+        };
+        created.contactos.push(newC);
       }
 
       writeLocalCompradores(currentLocal);
