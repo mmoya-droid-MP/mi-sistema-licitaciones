@@ -57,7 +57,17 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err.message || 'Error analizando licitación con IA.');
+          console.error("Error AI Analzye:", err);
+          setError('Aviso: Error de conexión detectado. Cargando evaluación de respaldo.');
+          setAnalysis({
+            matchScore: 50,
+            resumenEjecutivo: "Análisis de Inteligencia Artificial no disponible temporalmente por interrupción de conexión o servicio. Recomendamos revisar las bases directamente.",
+            requisitosClave: ["Revisar las bases administrativas y técnicas adjuntas en la plataforma Mercado Público."],
+            riesgosDetectados: ["Análisis de riesgo no disponible por desconexión temporal."],
+            recomendacionesEstrategicas: ["Reintente la evaluación más tarde cuando la conexión se estabilice."],
+            perfilesRequeridos: ["Sin información (Error de red)"],
+            cartaGantt: "No disponible."
+          } as any);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -177,7 +187,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                   Nivel de Afinidad Estimado (Match Score)
                 </span>
                 <p className="text-3xl font-extrabold text-white mt-1">
-                  {analysis.matchScore}%
+                  {analysis?.matchScore || 0}%
                 </p>
                 <p className="text-xs text-slate-300 mt-0.5">
                   Basado en capacidades técnicas, stack tecnológico y experiencia del equipo.
@@ -185,7 +195,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
               </div>
 
               <div className="w-16 h-16 rounded-full border-4 border-indigo-400 flex items-center justify-center font-extrabold text-xl text-indigo-300 bg-indigo-950/50">
-                {analysis.matchScore}%
+                {analysis?.matchScore || 0}%
               </div>
             </div>
 
@@ -195,7 +205,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                 Resumen Ejecutivo
               </h4>
               <p className="text-xs text-slate-800 leading-relaxed font-medium">
-                {analysis.resumenEjecutivo}
+                {analysis?.resumenEjecutivo || 'No disponible'}
               </p>
             </div>
 
@@ -208,7 +218,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                   Requisitos Clave TDR
                 </h4>
                 <ul className="text-xs text-emerald-950 space-y-1 list-disc pl-4">
-                  {(analysis?.requisitosClave || (analysis as any)?.requisitos || []).map((req: string, i: number) => (
+                  {(analysis?.requisitosClave || (analysis as any)?.requisitos || [])?.map((req: string, i: number) => (
                     <li key={i}>{req}</li>
                   ))}
                 </ul>
@@ -221,7 +231,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                   Riesgos y Barreras Detectadas
                 </h4>
                 <ul className="text-xs text-amber-950 space-y-1 list-disc pl-4">
-                  {(analysis?.riesgosDetectados || (analysis as any)?.riesgos || []).map((r: string, i: number) => (
+                  {(analysis?.riesgosDetectados || (analysis as any)?.riesgos || [])?.map((r: string, i: number) => (
                     <li key={i}>{r}</li>
                   ))}
                 </ul>
@@ -235,20 +245,20 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                 Recomendaciones Ganadoras para la Propuesta
               </h4>
               <ul className="text-xs text-blue-950 space-y-1 list-disc pl-4">
-                {(analysis?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || []).map((rec: string, i: number) => (
+                {(analysis?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || [])?.map((rec: string, i: number) => (
                   <li key={i}>{rec}</li>
                 ))}
               </ul>
             </div>
 
             {/* Perfiles Requeridos */}
-            {analysis?.perfilesRequeridos && analysis.perfilesRequeridos.length > 0 && (
+            {analysis?.perfilesRequeridos && analysis?.perfilesRequeridos.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-xs font-bold text-slate-700 flex items-center">
                   <UserCheck className="w-3.5 h-3.5 mr-1 text-slate-500" /> Perfiles y Capacidades Requeridas:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {analysis.perfilesRequeridos.map((p, i) => (
+                  {analysis?.perfilesRequeridos?.map((p, i) => (
                     <span key={i} className="bg-slate-100 text-slate-800 text-xs px-2.5 py-1 rounded font-medium">
                       {p}
                     </span>
@@ -265,7 +275,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                   Carta Gantt Preliminar (Markdown)
                 </h4>
                 <pre className="text-xs text-slate-700 font-mono whitespace-pre bg-white p-3 rounded-lg border border-slate-200 shadow-sm mt-2">
-                  {analysis.cartaGantt}
+                  {analysis?.cartaGantt}
                 </pre>
               </div>
             )}

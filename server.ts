@@ -22,6 +22,10 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const app = express();
 const PORT = 3000;
 
+// Mercado Público Cache
+const mpApiCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 // Helper to handle transient Gemini API errors (e.g. 503, 429)
 export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 5, delayMs = 2000): Promise<T> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -32,7 +36,13 @@ export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 5, delay
       const isTransient = status === 'UNAVAILABLE' || status === 503 || status === 429;
       
       if (isTransient && attempt < maxRetries) {
-        console.warn(`[AI Retry] Transient API error (${status}). Retrying in ${delayMs}ms... (Attempt ${attempt} of ${maxRetries})`);
+        // Fail fast if it's a hard quota limit rather than a fast transient rate limit
+        if (error?.message?.includes('exceeded your current quota') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+          console.log(`[AI Quota] Límite de cuota de Gemini alcanzado. Usando fallback inmediatamente.`);
+          throw error;
+        }
+
+        console.log(`[AI Retry] Transient API error (${status}). Retrying in ${delayMs}ms... (Attempt ${attempt} of ${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         delayMs *= 2; // Exponential backoff
       } else {
@@ -1667,10 +1677,13 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
       },
     }));
 
-    const text =
+    let text =
       response?.text ||
       (response as any)?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "{}";
+
+    // Limpieza estricta de markdown antes del JSON.parse
+    text = text.replace(/```json/i, '').replace(/```/g, '').trim();
 
     let rawResult: any = {};
     try {
@@ -1722,7 +1735,11 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
 
     return res.json(finalResult);
   } catch (error: any) {
-    console.error("Error en Gemini AI Analyze:", error);
+    if (error?.status === 429 || error?.message?.includes('quota') || error?.status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      console.log(`[Gemini Fallback] Usando evaluación por defecto. Error de API: ${error?.status || 'Sobrecarga/Cuota'}`);
+    } else {
+      console.error("Error en Gemini AI Analyze:", error);
+    }
     return res.json(createDynamicFallback(req.body?.licitacion));
   }
 });
@@ -1796,15 +1813,37 @@ app.get("/api/licitaciones/external", async (req, res) => {
       params.append("fecha", `${dd}${mm}${yyyy}`);
     }
 
+    const cacheKey = `licitaciones_${params.toString()}`;
+    const cached = mpApiCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && (now - cached.timestamp < CACHE_TTL)) {
+      return res.json(cached.data);
+    }
+
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "es-CL,es;q=0.9,en;q=0.8"
     };
 
+    // Implement a 300ms delay to prevent sudden bursting if multiple concurrent requests fire
+    await new Promise(r => setTimeout(r, 300));
+
     let fetchRes = await fetch(`${targetUrl}?${params.toString()}`, { headers });
     
-    // Retry once if rate-limited or transient network error
+    // Catch Rate Limit explicitly (429) and serve stale cache if available
+    if (fetchRes.status === 429) {
+      if (cached) {
+        console.warn(`[Mercado Público] 429 Rate Limit hit. Serving STALE cache for ${cacheKey}`);
+        return res.json(cached.data);
+      } else {
+        console.warn(`[Mercado Público] 429 Rate Limit hit. NO CACHE available for ${cacheKey}`);
+        return res.json({ Listado: [], Cantidad: 0, warning: "API de Mercado Público sobrecargada temporalmente (HTTP 429). Reintente en unos minutos." });
+      }
+    }
+
+    // Retry once if transient network error
     if (!fetchRes.ok && fetchRes.status >= 500) {
       await new Promise((r) => setTimeout(r, 1000));
       fetchRes = await fetch(`${targetUrl}?${params.toString()}`, { headers });
@@ -1850,6 +1889,10 @@ app.get("/api/licitaciones/external", async (req, res) => {
           };
         });
       }
+      
+      // Update Cache
+      mpApiCache.set(cacheKey, { data, timestamp: Date.now() });
+      
       return res.json(data);
     } else {
       return res.status(fetchRes.status).json({
@@ -1886,15 +1929,44 @@ app.get("/api/ordenescompra/search", async (req, res) => {
       params.append("fecha", `${dd}${mm}${yyyy}`);
     }
 
+    const cacheKey = `oc_${params.toString()}`;
+    const cached = mpApiCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && (now - cached.timestamp < CACHE_TTL)) {
+      return res.json(cached.data);
+    }
+
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "es-CL,es;q=0.9,en;q=0.8"
     };
 
-    const fetchRes = await fetch(`${targetUrl}?${params.toString()}`, { headers });
+    await new Promise(r => setTimeout(r, 300)); // Delay to prevent saturation
+
+    let fetchRes = await fetch(`${targetUrl}?${params.toString()}`, { headers });
+    
+    // Catch Rate Limit explicitly (429) and serve stale cache if available
+    if (fetchRes.status === 429) {
+      if (cached) {
+        console.warn(`[Mercado Público OC] 429 Rate Limit hit. Serving STALE cache for ${cacheKey}`);
+        return res.json(cached.data);
+      } else {
+        console.warn(`[Mercado Público OC] 429 Rate Limit hit. NO CACHE available for ${cacheKey}`);
+        return res.json({ Listado: [], Cantidad: 0, warning: "API OC sobrecargada temporalmente (HTTP 429)." });
+      }
+    }
+
+    // Retry once if transient network error
+    if (!fetchRes.ok && fetchRes.status >= 500) {
+      await new Promise((r) => setTimeout(r, 1000));
+      fetchRes = await fetch(`${targetUrl}?${params.toString()}`, { headers });
+    }
+
     if (fetchRes.ok) {
       const data = await fetchRes.json();
+      mpApiCache.set(cacheKey, { data, timestamp: Date.now() });
       return res.json(data);
     } else {
       return res.json({
@@ -2062,35 +2134,67 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
       }
     }));
 
-    // Limpieza de respuesta JSON
-    let textResponse = (response?.text || "").replace(/```json/g, '').replace(/```/g, '').trim();
+    // Limpieza estricta de respuesta JSON
+    let textResponse = (response?.text || "").replace(/```json/i, '').replace(/```/g, '').trim();
+    
+    const fallbackEvaluacion = {
+      matchScore: 50,
+      resumenEjecutivo: "Análisis no disponible temporalmente por alta demanda en el servicio de IA. Recomendamos revisar las bases directamente.",
+      requisitosClave: ["Revisar las bases administrativas y técnicas adjuntas en la plataforma."],
+      riesgos: ["No se han podido detectar riesgos de forma automatizada debido a un error de servicio temporal."]
+    };
+
     let dataEvaluacion;
     try {
       dataEvaluacion = JSON.parse(textResponse);
+      
+      // Asegurar que todos los campos requeridos estén presentes
+      dataEvaluacion.matchScore = typeof dataEvaluacion.matchScore === 'number' ? dataEvaluacion.matchScore : fallbackEvaluacion.matchScore;
+      dataEvaluacion.resumenEjecutivo = dataEvaluacion.resumenEjecutivo || dataEvaluacion.resumen_ejecutivo || fallbackEvaluacion.resumenEjecutivo;
+      dataEvaluacion.requisitosClave = (Array.isArray(dataEvaluacion.requisitosClave) && dataEvaluacion.requisitosClave.length > 0) ? dataEvaluacion.requisitosClave : fallbackEvaluacion.requisitosClave;
+      dataEvaluacion.riesgos = (Array.isArray(dataEvaluacion.riesgos) && dataEvaluacion.riesgos.length > 0) ? dataEvaluacion.riesgos : fallbackEvaluacion.riesgos;
+      
     } catch (parseError) {
       console.error("Error parseando JSON de Gemini:", parseError);
-      return res.status(500).json({ success: false, error: "La IA no devolvió un JSON válido." });
+      dataEvaluacion = fallbackEvaluacion;
     }
 
     // 3. Persistencia automática en Supabase
     if (supabase) {
-      await supabase.from('evaluaciones_ia').insert([{
-        codigo_proceso: codigoLicitacion,
-        nombre_proceso: nombreLicitacion || "",
-        organismo: organismo || "",
-        tipo_proceso: tipoProceso || 'Licitación',
-        match_score: dataEvaluacion.matchScore || dataEvaluacion.match_score,
-        resumen_ejecutivo: dataEvaluacion.resumenEjecutivo || dataEvaluacion.resumen_ejecutivo,
-        requisitos_clave: dataEvaluacion.requisitosClave || dataEvaluacion.requisitos_clave,
-        riesgos: dataEvaluacion.riesgos
-      }]);
+      try {
+        await supabase.from('evaluaciones_ia').insert([{
+          codigo_proceso: codigoLicitacion,
+          nombre_proceso: nombreLicitacion || "",
+          organismo: organismo || "",
+          tipo_proceso: tipoProceso || 'Licitación',
+          match_score: dataEvaluacion.matchScore,
+          resumen_ejecutivo: dataEvaluacion.resumenEjecutivo,
+          requisitos_clave: dataEvaluacion.requisitosClave,
+          riesgos: dataEvaluacion.riesgos
+        }]);
+      } catch (dbError) {
+        console.error("Error guardando en Supabase:", dbError);
+      }
     }
 
     res.json({ success: true, origen: 'gemini-live', data: dataEvaluacion });
 
   } catch (error: any) {
-    console.error("Error en la evaluación del prompt avanzado:", error);
-    res.status(500).json({ success: false, error: error.message });
+    if (error?.status === 429 || error?.message?.includes('quota') || error?.status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      console.log(`[Gemini Fallback] Usando evaluación por defecto. Error de API: ${error?.status || 'Sobrecarga/Cuota'}`);
+    } else {
+      console.error("Error en la evaluación del prompt avanzado:", error);
+    }
+    
+    // Objeto estructurado por defecto con valores seguros en caso de fallo (503/429)
+    const fallbackEvaluacion = {
+      matchScore: 50,
+      resumenEjecutivo: "Análisis no disponible temporalmente por alta demanda en el servicio de IA. Recomendamos revisar las bases directamente.",
+      requisitosClave: ["Revisar las bases administrativas y técnicas adjuntas en la plataforma."],
+      riesgos: ["No se han podido detectar riesgos de forma automatizada debido a un error de servicio temporal."]
+    };
+    
+    res.json({ success: true, origen: 'fallback', data: fallbackEvaluacion });
   }
 });
 

@@ -15,7 +15,7 @@ export default defineConfig(() => {
       port: 3000,
       host: '0.0.0.0',
       strictPort: true,
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: process.env.DISABLE_HMR === 'true' ? false : { overlay: false },
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
