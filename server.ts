@@ -9,6 +9,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 
 import { createClient } from "@supabase/supabase-js";
+import { perfilEmpresaTexto } from "./perfilEmpresa";
 
 dotenv.config();
 
@@ -1613,6 +1614,7 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
       model: "gemini-3.7-flash",
       contents: prompt,
       config: {
+        systemInstruction: perfilEmpresaTexto,
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
@@ -2022,7 +2024,10 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
     // 2. Prompt Riguroso de Ingeniería Prompt para Mercado Público
     const promptEspecializado = `
     Actúa como un Consultor Senior Especialista en Licitaciones Públicas de Chile (Mercado Público / ChileCompra).
-    Realiza una evaluación técnica y estratégica para el siguiente proceso:
+    Realiza una evaluación técnica y estratégica para el siguiente proceso comparándolo contra nuestro Perfil de Empresa (GeoSolve) provisto en las instrucciones del sistema.
+    
+    Debes calcular un Match Score real (0-100%) indicando qué tan bien encaja esta licitación con el Stack Tecnológico, certificaciones y capacidad financiera de GeoSolve.
+    Detalla los requisitos cumplidos y las brechas basándote exclusivamente en el perfil de la empresa.
 
     - ID Proceso: ${codigoLicitacion}
     - Nombre del Proyecto: ${nombreLicitacion}
@@ -2034,16 +2039,13 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
     Formato JSON esperado de respuesta:
     {
       "matchScore": 85,
-      "resumenEjecutivo": "Afinidad técnica general del proyecto, viabilidad de negocio y esfuerzo estimado para postular.",
+      "resumenEjecutivo": "Afinidad técnica general del proyecto, viabilidad de negocio y esfuerzo estimado para postular según perfil GeoSolve.",
       "requisitosClave": [
-        "Acreditar experiencia en proyectos similares del sector público.",
-        "Presentación de boleta de garantía de fiel cumplimiento de contrato.",
-        "Certificación de personal técnico asignado."
+        "Cumplido: Integración de APIs (GeoSolve tiene certificación).",
+        "Brecha: Requiere experiencia en SAP (GeoSolve no especifica experiencia directa)."
       ],
       "riesgos": [
-        "Cláusulas de multas estrictas por retrasos en entregables.",
-        "Plazos de ejecución acotados que exigen alta capacidad operativa.",
-        "Riesgo de flujo de caja por pagos a 30 o 60 días."
+        "Riesgo financiero: Boleta de garantía supera los $50M CLP del perfil."
       ]
     }
     `;
@@ -2058,6 +2060,7 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
       model: "gemini-3.7-flash",
       contents: promptEspecializado,
       config: {
+        systemInstruction: perfilEmpresaTexto,
         responseMimeType: "application/json"
       }
     }));
