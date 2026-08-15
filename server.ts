@@ -21,6 +21,27 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const app = express();
 const PORT = 3000;
 
+// Helper to handle transient Gemini API errors (e.g. 503, 429)
+export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 3, delayMs = 1500): Promise<T> => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const status = error?.status || error?.response?.status;
+      const isTransient = status === 'UNAVAILABLE' || status === 503 || status === 429;
+      
+      if (isTransient && attempt < maxRetries) {
+        console.warn(`[AI Retry] Transient API error (\${status}). Retrying in \${delayMs}ms... (Attempt \${attempt} of \${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        delayMs *= 2; // Exponential backoff
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw new Error("Max retries reached");
+};
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -1588,7 +1609,7 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
 4. ESTRUCTURA DE SALIDA JSON ESTRICTO: Genera la salida según el esquema solicitado.
 `;
 
-    const response = await ai.models.generateContent({
+    const response = await withAIRetry(() => ai.models.generateContent({
       model: "gemini-3.7-flash",
       contents: prompt,
       config: {
@@ -1644,7 +1665,7 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
           required: ["matchScore", "resumenEjecutivo", "requisitos", "riesgos", "recomendaciones", "cartaGantt"]
         }
       },
-    });
+    }));
 
     const text =
       response?.text ||
@@ -2033,13 +2054,13 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
+    const response = await withAIRetry(() => ai.models.generateContent({
       model: "gemini-3.7-flash",
       contents: promptEspecializado,
       config: {
         responseMimeType: "application/json"
       }
-    });
+    }));
 
     // Limpieza de respuesta JSON
     let textResponse = (response?.text || "").replace(/```json/g, '').replace(/```/g, '').trim();
