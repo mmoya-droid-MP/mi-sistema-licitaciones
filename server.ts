@@ -1579,8 +1579,6 @@ app.post("/api/ai/analyze", async (req, res) => {
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `
-Eres un consultor experto en compras públicas de Chile (Mercado Público, Convenio Marco, Compra Ágil) y evaluación estratégica de propuestas de licitación.
-
 Analiza minuciosamente la siguiente oportunidad e indica la viabilidad y recomendación estratégica para postular:
 
 DATOS DE LA LICITACIÓN/COTIZACIÓN:
@@ -2023,7 +2021,6 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
 
     // 2. Prompt Riguroso de Ingeniería Prompt para Mercado Público
     const promptEspecializado = `
-    Actúa como un Consultor Senior Especialista en Licitaciones Públicas de Chile (Mercado Público / ChileCompra).
     Realiza una evaluación técnica y estratégica para el siguiente proceso comparándolo contra nuestro Perfil de Empresa (GeoSolve) provisto en las instrucciones del sistema.
     
     Debes calcular un Match Score real (0-100%) indicando qué tan bien encaja esta licitación con el Stack Tecnológico, certificaciones y capacidad financiera de GeoSolve.
