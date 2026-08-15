@@ -1569,7 +1569,15 @@ ${perfilEmpresa || "Empresa de Tecnología, Consultoría TI, Desarrollo de Softw
 INSTRUCCIONES CRÍTICAS:
 1. DIVERSIFICACIÓN DEL MATCH SCORE: Evalúa la afinidad tecnológica real entre el requerimiento y la empresa. Calcula un "matchScore" numérico entero verdaderamente variable entre 45 y 98 (porcentaje). NUNCA uses un número estático ni valores por defecto repetidos.
 2. CONTENIDO DINÁMICO ESPECÍFICO POR LICITACIÓN: En los puntos de "requisitos", "riesgos" y "recomendaciones", CITA elementos específicos del título ("${licitacion.nombre}"), la descripción o el organismo comprador ("${licitacion.cliente}") de la ficha activa, evitando respuestas genéricas repetidas.
-3. ESTRUCTURA DE SALIDA JSON ESTRICTO: Genera la salida según el esquema solicitado.
+3. ESTRUCTURA OBLIGATORIA DE LA CARTA GANTT EN MARKDOWN: Basado en el plazo total exigido en la licitación, genera una tabla en Markdown con la siguiente estructura de fases y hitos para GEOSOLVE:
+| Fase / Hito del Proyecto | Entregables Claves | Período 1 | Período 2 | Período 3 | Período 4 |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| 1. Levantamiento y Arquitectura | Informe de Diagnóstico y Plan de Trabajo | ████ | | | |
+| 2. Configuración e Integración | Entorno GCP, APIs o Desarrollo Web listo | | ████ | | |
+| 3. Migración de Datos y Pruebas | Base de datos migrada y QA aprobado | | | ████ | |
+| 4. Capacitación y Soporte SLA | Manuales, Transferencia y Soporte activo | | | | ████ |
+Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitada por el comprador.
+4. ESTRUCTURA DE SALIDA JSON ESTRICTO: Genera la salida según el esquema solicitado.
 `;
 
     const response = await ai.models.generateContent({
@@ -1619,9 +1627,13 @@ INSTRUCCIONES CRÍTICAS:
               type: "ARRAY",
               items: { type: "STRING" },
               description: "Perfiles profesionales solicitados"
+            },
+            cartaGantt: {
+              type: "STRING",
+              description: "Tabla Markdown de la Carta Gantt siguiendo estrictamente la estructura solicitada"
             }
           },
-          required: ["matchScore", "resumenEjecutivo", "requisitos", "riesgos", "recomendaciones"]
+          required: ["matchScore", "resumenEjecutivo", "requisitos", "riesgos", "recomendaciones", "cartaGantt"]
         }
       },
     });
@@ -1675,7 +1687,8 @@ INSTRUCCIONES CRÍTICAS:
       riesgosDetectados: riskList,
       recomendaciones: recList,
       recomendacionesEstrategicas: recList,
-      perfilesRequeridos: perfilesList
+      perfilesRequeridos: perfilesList,
+      cartaGantt: rawResult.cartaGantt || ""
     };
 
     return res.json(finalResult);

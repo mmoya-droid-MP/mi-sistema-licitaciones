@@ -7,7 +7,8 @@ import {
   UserCheck,
   X,
   Loader2,
-  Plus
+  Plus,
+  CalendarDays
 } from 'lucide-react';
 import { LicitacionItem, GeminiAnalysisResult } from '../types';
 
@@ -84,7 +85,8 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
           recomendaciones: analysis?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || [],
           perfiles: analysis?.perfilesRequeridos || [],
           matchScore: analysis?.matchScore,
-          resumenEjecutivo: analysis?.resumenEjecutivo
+          resumenEjecutivo: analysis?.resumenEjecutivo,
+          cartaGantt: analysis?.cartaGantt
         }
       };
 
@@ -252,6 +254,19 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Carta Gantt (Markdown) */}
+            {analysis?.cartaGantt && (
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 overflow-x-auto">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center">
+                  <CalendarDays className="w-4 h-4 mr-1.5 text-slate-600" />
+                  Carta Gantt Preliminar (Markdown)
+                </h4>
+                <pre className="text-xs text-slate-700 font-mono whitespace-pre bg-white p-3 rounded-lg border border-slate-200 shadow-sm mt-2">
+                  {analysis.cartaGantt}
+                </pre>
               </div>
             )}
           </div>

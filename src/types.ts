@@ -124,6 +124,7 @@ export interface GeminiAnalysisResult {
   riesgosDetectados: string[];
   recomendacionesEstrategicas: string[];
   perfilesRequeridos: string[];
+  cartaGantt?: string;
 }
 
 export interface Oportunidad {
