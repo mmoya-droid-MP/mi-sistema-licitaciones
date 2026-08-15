@@ -8,9 +8,11 @@ import {
   X,
   Loader2,
   Plus,
-  CalendarDays
+  CalendarDays,
+  Download
 } from 'lucide-react';
 import { LicitacionItem, GeminiAnalysisResult } from '../types';
+import { generateAIEvaluationPDF } from '../lib/aiEvaluationPdf';
 
 interface AIEvaluatorModalProps {
   item: LicitacionItem;
@@ -298,23 +300,38 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
             Cerrar
           </button>
 
-          <button
-            onClick={handleAddPostulacion}
-            disabled={submitting || loading}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Guardando...</span>
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                <span>Añadir a Mis Postulaciones</span>
-              </>
+          <div className="flex items-center gap-2">
+            {analysis && (
+              <button
+                onClick={() => generateAIEvaluationPDF(item, analysis)}
+                disabled={submitting || loading}
+                className="flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="w-4 h-4" />
+                <span>Descargar Reporte PDF</span>
+              </button>
             )}
-          </button>
+
+            {onAddPostulacion && (
+              <button
+                onClick={handleAddPostulacion}
+                disabled={submitting || loading}
+                className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    <span>Añadir a Mis Postulaciones</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
