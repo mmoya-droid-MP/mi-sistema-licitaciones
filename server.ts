@@ -1736,7 +1736,7 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
     return res.json(finalResult);
   } catch (error: any) {
     if (error?.status === 429 || error?.message?.includes('quota') || error?.status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
-      console.log(`[Gemini Fallback] Usando evaluación por defecto. Error de API: ${error?.status || 'Sobrecarga/Cuota'}`);
+      console.log(`[Gemini Fallback] Usando evaluación por defecto. Estado de API: ${error?.status || 'Sobrecarga/Cuota'}`);
     } else {
       console.error("Error en Gemini AI Analyze:", error);
     }
@@ -2181,7 +2181,7 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
 
   } catch (error: any) {
     if (error?.status === 429 || error?.message?.includes('quota') || error?.status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
-      console.log(`[Gemini Fallback] Usando evaluación por defecto. Error de API: ${error?.status || 'Sobrecarga/Cuota'}`);
+      console.log(`[Gemini Fallback] Usando evaluación por defecto. Estado de API: ${error?.status || 'Sobrecarga/Cuota'}`);
     } else {
       console.error("Error en la evaluación del prompt avanzado:", error);
     }
