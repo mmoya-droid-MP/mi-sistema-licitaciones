@@ -8,7 +8,15 @@ import pg from "pg";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
+import { createClient } from "@supabase/supabase-js";
+
 dotenv.config();
+
+// Configuración de Supabase
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
 
 const app = express();
 const PORT = 3000;
@@ -1581,7 +1589,7 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.7-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -1955,6 +1963,115 @@ const handleLogout = (_req: express.Request, res: express.Response) => {
     message: "La sesión previa fue eliminada correctamente."
   });
 };
+
+// ==========================================================
+// PASO 3: MOTOR DE EVALUACIÓN IA AVANZADO (GEMINI AI + SUPABASE)
+// ==========================================================
+
+app.post('/api/evaluar-licitacion', async (req, res) => {
+  try {
+    const { codigoLicitacion, nombreLicitacion, organismo, tipoProceso } = req.body;
+
+    if (!codigoLicitacion) {
+      return res.status(400).json({ success: false, error: "Falta el código de la licitación." });
+    }
+
+    // 1. Revisar si la evaluación ya existe en Supabase (solo si Supabase está configurado)
+    if (supabase) {
+      const { data: existente, error: supabaseError } = await supabase
+        .from('evaluaciones_ia')
+        .select('*')
+        .eq('codigo_proceso', codigoLicitacion)
+        .single();
+
+      if (existente && !supabaseError) {
+        return res.json({
+          success: true,
+          origen: 'supabase',
+          data: {
+            matchScore: existente.match_score,
+            resumenEjecutivo: existente.resumen_ejecutivo,
+            requisitosClave: existente.requisitos_clave,
+            riesgos: existente.riesgos
+          }
+        });
+      }
+    }
+
+    // 2. Prompt Riguroso de Ingeniería Prompt para Mercado Público
+    const promptEspecializado = `
+    Actúa como un Consultor Senior Especialista en Licitaciones Públicas de Chile (Mercado Público / ChileCompra).
+    Realiza una evaluación técnica y estratégica para el siguiente proceso:
+
+    - ID Proceso: ${codigoLicitacion}
+    - Nombre del Proyecto: ${nombreLicitacion}
+    - Organismo Comprador: ${organismo}
+    - Tipo de Mercado: ${tipoProceso || 'Licitación Publica'}
+
+    Tu tarea es analizar la factibilidad de postulación y generar un reporte JSON estricto sin formateo markdown extras (NO uses \`\`\`json).
+
+    Formato JSON esperado de respuesta:
+    {
+      "matchScore": 85,
+      "resumenEjecutivo": "Afinidad técnica general del proyecto, viabilidad de negocio y esfuerzo estimado para postular.",
+      "requisitosClave": [
+        "Acreditar experiencia en proyectos similares del sector público.",
+        "Presentación de boleta de garantía de fiel cumplimiento de contrato.",
+        "Certificación de personal técnico asignado."
+      ],
+      "riesgos": [
+        "Cláusulas de multas estrictas por retrasos en entregables.",
+        "Plazos de ejecución acotados que exigen alta capacidad operativa.",
+        "Riesgo de flujo de caja por pagos a 30 o 60 días."
+      ]
+    }
+    `;
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ success: false, error: "Falta la clave API de Gemini." });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-3.7-flash",
+      contents: promptEspecializado,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    // Limpieza de respuesta JSON
+    let textResponse = (response?.text || "").replace(/```json/g, '').replace(/```/g, '').trim();
+    let dataEvaluacion;
+    try {
+      dataEvaluacion = JSON.parse(textResponse);
+    } catch (parseError) {
+      console.error("Error parseando JSON de Gemini:", parseError);
+      return res.status(500).json({ success: false, error: "La IA no devolvió un JSON válido." });
+    }
+
+    // 3. Persistencia automática en Supabase
+    if (supabase) {
+      await supabase.from('evaluaciones_ia').insert([{
+        codigo_proceso: codigoLicitacion,
+        nombre_proceso: nombreLicitacion || "",
+        organismo: organismo || "",
+        tipo_proceso: tipoProceso || 'Licitación',
+        match_score: dataEvaluacion.matchScore || dataEvaluacion.match_score,
+        resumen_ejecutivo: dataEvaluacion.resumenEjecutivo || dataEvaluacion.resumen_ejecutivo,
+        requisitos_clave: dataEvaluacion.requisitosClave || dataEvaluacion.requisitos_clave,
+        riesgos: dataEvaluacion.riesgos
+      }]);
+    }
+
+    res.json({ success: true, origen: 'gemini-live', data: dataEvaluacion });
+
+  } catch (error: any) {
+    console.error("Error en la evaluación del prompt avanzado:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 app.delete("/api/mp/session", handleLogout);
 app.post("/api/mp/logout", handleLogout);
