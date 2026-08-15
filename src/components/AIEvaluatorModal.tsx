@@ -16,21 +16,27 @@ interface AIEvaluatorModalProps {
   item: LicitacionItem;
   onClose: () => void;
   onAddPostulacion?: (item: LicitacionItem) => void;
+  preloadedAnalysis?: GeminiAnalysisResult;
 }
 
 export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
   item,
   onClose,
-  onAddPostulacion
+  onAddPostulacion,
+  preloadedAnalysis
 }) => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!preloadedAnalysis);
   const [submitting, setSubmitting] = useState(false);
   const [toastSuccess, setToastSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<GeminiAnalysisResult | null>(null);
+  const [analysis, setAnalysis] = useState<GeminiAnalysisResult | null>(preloadedAnalysis || null);
 
   useEffect(() => {
     let isMounted = true;
+
+    if (preloadedAnalysis) {
+      return; // Skip fetching if we already have the analysis
+    }
 
     async function runAI() {
       setLoading(true);

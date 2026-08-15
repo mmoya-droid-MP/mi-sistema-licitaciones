@@ -15,7 +15,7 @@ import {
 import { AlertaNotificacion } from '../types';
 
 interface HeaderProps {
-  activeTab: 'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts';
+  activeTab: 'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts' | 'historial-ia';
   setActiveTab: (tab: any) => void;
   notificaciones: AlertaNotificacion[];
   setNotificaciones?: React.Dispatch<React.SetStateAction<AlertaNotificacion[]>>;
@@ -142,6 +142,18 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              onClick={() => setActiveTab('historial-ia')}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'historial-ia'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span>Historial IA</span>
+            </button>
+
+            <button
               onClick={handleAlertsClick}
               className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'alertas'
@@ -194,6 +206,14 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           Calendario
+        </button>
+        <button
+          onClick={() => setActiveTab('historial-ia')}
+          className={`flex-1 py-1.5 px-2 text-center whitespace-nowrap rounded ${
+            activeTab === 'historial-ia' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400'
+          }`}
+        >
+          IA
         </button>
         <button
           onClick={handleAlertsClick}

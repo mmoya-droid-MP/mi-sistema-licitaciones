@@ -12,6 +12,7 @@ import { ReportsModal } from './components/ReportsModal';
 import { SystemSettingsModal } from './components/SystemSettingsModal';
 import { AuthModal } from './components/AuthModal';
 import { OrdenesCompraView } from './components/OrdenesCompraView';
+import { HistorialEvaluacionesView } from './components/HistorialEvaluacionesView';
 import {
   INITIAL_LICITACIONES,
   INITIAL_POSTULACIONES,
@@ -24,7 +25,7 @@ import { fetchOportunidadesMercadoPublico, fetch30DiasMercadoPublico } from './s
 import { filterOportunidades } from './utils/filterOportunidades';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'radar' | 'ordenescompra' | 'oc' | 'postulaciones' | 'calendar' | 'compradores' | 'alertas' | 'alerts' | 'historial-ia'>('dashboard');
 
   const [licitaciones, setLicitaciones] = useState<LicitacionItem[]>(INITIAL_LICITACIONES);
   const [postulaciones, setPostulaciones] = useState<Postulacion[]>(INITIAL_POSTULACIONES);
@@ -247,6 +248,10 @@ export default function App() {
             alertas={alertas}
             setAlertas={setAlertas}
           />
+        )}
+
+        {activeTab === 'historial-ia' && (
+          <HistorialEvaluacionesView />
         )}
       </main>
 

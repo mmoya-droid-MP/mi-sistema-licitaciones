@@ -2260,6 +2260,27 @@ app.post("/api/submit-2fa", async (req, res) => {
   }
 });
 
+// Endpoint to retrieve evaluation history
+app.get("/api/evaluaciones", async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: "Supabase no está configurado." });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('evaluaciones_ia')
+      .select('*')
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    
+    return res.json(data);
+  } catch (err: any) {
+    console.error("Error obteniendo historial de evaluaciones:", err);
+    return res.status(500).json({ error: "No se pudo obtener el historial." });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
