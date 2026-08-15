@@ -23,7 +23,7 @@ const app = express();
 const PORT = 3000;
 
 // Helper to handle transient Gemini API errors (e.g. 503, 429)
-export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 3, delayMs = 1500): Promise<T> => {
+export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 5, delayMs = 2000): Promise<T> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
@@ -32,7 +32,7 @@ export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 3, delay
       const isTransient = status === 'UNAVAILABLE' || status === 503 || status === 429;
       
       if (isTransient && attempt < maxRetries) {
-        console.warn(`[AI Retry] Transient API error (\${status}). Retrying in \${delayMs}ms... (Attempt \${attempt} of \${maxRetries})`);
+        console.warn(`[AI Retry] Transient API error (${status}). Retrying in ${delayMs}ms... (Attempt ${attempt} of ${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         delayMs *= 2; // Exponential backoff
       } else {
