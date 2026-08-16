@@ -85,7 +85,7 @@ export function generateAIEvaluationPDF(item: LicitacionItem, analysis: GeminiAn
   // Match Score
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  if (analysis.matchScore >= 80) {
+  if (analysis.matchScore >= 75) {
     doc.setTextColor(16, 185, 129); // emerald-500
   } else if (analysis.matchScore >= 50) {
     doc.setTextColor(245, 158, 11); // amber-500

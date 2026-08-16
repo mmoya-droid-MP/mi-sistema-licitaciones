@@ -56,6 +56,7 @@ export interface LicitacionItem {
   FechaCierreOficial?: string;
   FechaFinPublicacion?: string;
   FechaCierreCotizacion?: string;
+  matchScore?: number;
   [key: string]: any;
 }
 

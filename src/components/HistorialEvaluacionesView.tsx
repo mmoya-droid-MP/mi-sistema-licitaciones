@@ -75,7 +75,7 @@ export const HistorialEvaluacionesView: React.FC = () => {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+    if (score >= 75) return 'text-emerald-600 bg-emerald-50 border-emerald-200';
     if (score >= 50) return 'text-amber-600 bg-amber-50 border-amber-200';
     return 'text-rose-600 bg-rose-50 border-rose-200';
   };

@@ -81,6 +81,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const [tableTipo, setTableTipo] = useState<string>('Todas');
   const [tableStatus, setTableStatus] = useState<'ACTIVAS' | 'VENCIDAS' | 'TODAS'>('ACTIVAS');
+  const [filterMatch, setFilterMatch] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [alertModalItem, setAlertModalItem] = useState<LicitacionItem | null>(null);
 
@@ -104,6 +105,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const filteredTableItems = useMemo(() => {
     return safeLicitaciones.filter((item) => {
       if (!item) return false;
+
+      if (filterMatch && (!item.matchScore || item.matchScore < 75)) {
+        return false;
+      }
 
       const hasSearchQuery = Boolean(debouncedTableSearch && debouncedTableSearch.trim());
 
@@ -334,6 +339,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                  {/* Match >= 75% Toggle */}
+                  <button
+                    onClick={() => setFilterMatch(!filterMatch)}
+                    className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-bold rounded-lg border transition ${
+                      filterMatch 
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-xs' 
+                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${filterMatch ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <span>≥ 75% Match</span>
+                  </button>
+
                   {/* Status Toggle Buttons */}
                   <div className="flex items-center space-x-1 bg-white border border-slate-300 p-1 rounded-lg">
                     <button
@@ -459,9 +477,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             </span>
                           </td>
                           <td className="py-3 px-4 font-semibold text-slate-800 max-w-xs sm:max-w-md">
-                            <p className="line-clamp-2" title={cleanTextPrefixes(item.nombre)}>
-                              {cleanTextPrefixes(item.nombre)}
-                            </p>
+                            <div className="flex flex-col gap-1">
+                              <p className="line-clamp-2" title={cleanTextPrefixes(item.nombre)}>
+                                {cleanTextPrefixes(item.nombre)}
+                              </p>
+                              {item.matchScore && item.matchScore >= 75 && (
+                                <span className="w-fit bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-200 shadow-xs">
+                                  <Sparkles className="w-3 h-3" />
+                                  Match {item.matchScore}%
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="max-w-[220px] truncate pr-4 text-slate-700 font-medium">
                             {item.cliente}
@@ -591,6 +617,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">
                         {item.tipo}
                       </span>
+                      {item.matchScore && item.matchScore >= 75 && (
+                        <span className="w-fit bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-200">
+                          <Sparkles className="w-3 h-3" />
+                          Match {item.matchScore}%
+                        </span>
+                      )}
                     </div>
 
                     <span className="bg-emerald-100 text-emerald-800 font-bold text-[11px] px-2 py-0.5 rounded-full">

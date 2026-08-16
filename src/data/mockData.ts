@@ -443,7 +443,7 @@ export const INITIAL_NOTIFICACIONES: AlertaNotificacion[] = [
   {
     id: "notif-2",
     codigoLicitacion: "587-32-LE26",
-    titulo: "✨ Alta Coincidencia de Alerta (Match 95%)",
+    titulo: "✨ Alta Coincidencia de Alerta (Match 85%)",
     mensaje: "Licitación prioritaria detectada: Desarrollo e Interoperabilidad GIS en GCP.",
     fecha: "2026-08-05T10:15:00",
     leida: true,
