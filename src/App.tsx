@@ -141,7 +141,7 @@ export default function App() {
         openSettings={() => setShowSettingsModal(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 pt-6 md:pt-8">
         {activeTab === 'dashboard' && (
           <DashboardView
             licitaciones={licitacionesFiltradasVigentes}
