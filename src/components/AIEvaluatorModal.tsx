@@ -55,13 +55,69 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
         });
 
         if (!response.ok) {
-          const errData = await response.json();
+          const errData = await response.json().catch(()=>({}));
           throw new Error(errData.error || 'Error consultando servicio Gemini AI.');
         }
 
-        const data = await response.json();
-        if (isMounted) {
-          setAnalysis(data);
+        if (response.headers.get('Content-Type')?.includes('text/plain')) {
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error("No stream available");
+          const decoder = new TextDecoder();
+          let text = '';
+          
+          let partialData: any = {
+            porcentaje_match: 0,
+            resumen_ejecutivo: "",
+            requisitos_cumplidos: [],
+            requisitos_faltantes: [],
+            brechas_criticas: []
+          };
+
+          if (isMounted) setLoading(false); // Stop loading immediately when stream starts
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            text += decoder.decode(value, { stream: true });
+            
+            // Extract values via regex to handle partial JSON seamlessly
+            const matchScoreMatch = text.match(/"porcentaje_match"\s*:\s*(\d+)/);
+            if (matchScoreMatch) partialData.porcentaje_match = parseInt(matchScoreMatch[1]);
+            
+            const resumenMatch = text.match(/"resumen_ejecutivo"\s*:\s*"([^]*?)"/);
+            if (resumenMatch) partialData.resumen_ejecutivo = resumenMatch[1];
+            else {
+               // partial string matching for in-progress typing
+               const openMatch = text.match(/"resumen_ejecutivo"\s*:\s*"([^]*)/);
+               if (openMatch) partialData.resumen_ejecutivo = openMatch[1];
+            }
+            
+            const extractArray = (key: string) => {
+              const m = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]?`));
+              if (m) {
+                return m[1].split('","').map(s => s.replace(/["\n]/g, '').trim()).filter(Boolean);
+              }
+              // partial array parsing
+              const mOpen = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([^]*)`));
+              if (mOpen) {
+                return mOpen[1].split('","').map(s => s.replace(/["\n]/g, '').trim()).filter(Boolean);
+              }
+              return [];
+            };
+            
+            partialData.requisitos_cumplidos = extractArray("requisitos_cumplidos");
+            partialData.requisitos_faltantes = extractArray("requisitos_faltantes");
+            partialData.brechas_criticas = extractArray("brechas_criticas");
+            
+            if (isMounted) {
+               setAnalysis({...partialData, matchScore: partialData.porcentaje_match});
+            }
+          }
+        } else {
+          const data = await response.json();
+          if (isMounted) {
+            setAnalysis({...data, matchScore: data.porcentaje_match || data.matchScore});
+          }
         }
       } catch (err: any) {
         if (isMounted) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useDeferredValue } from 'react';
 import { FileText, Loader2, Search, ExternalLink, CalendarDays, BarChart2 } from 'lucide-react';
 import { LicitacionItem, GeminiAnalysisResult } from '../types';
 import { AIEvaluatorModal } from './AIEvaluatorModal';
@@ -21,6 +21,7 @@ export const HistorialEvaluacionesView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearch = useDeferredValue(searchTerm);
   
   const [selectedEvaluacion, setSelectedEvaluacion] = useState<{
     item: LicitacionItem,
@@ -81,9 +82,9 @@ export const HistorialEvaluacionesView: React.FC = () => {
   };
 
   const filteredData = evaluaciones.filter(e => 
-    e.codigo_proceso.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.nombre_proceso.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.organismo.toLowerCase().includes(searchTerm.toLowerCase())
+    e.codigo_proceso.toLowerCase().includes(deferredSearch.toLowerCase()) ||
+    e.nombre_proceso.toLowerCase().includes(deferredSearch.toLowerCase()) ||
+    e.organismo.toLowerCase().includes(deferredSearch.toLowerCase())
   );
 
   return (

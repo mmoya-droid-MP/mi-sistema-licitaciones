@@ -58,12 +58,12 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
   setActiveTab
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const deferredSearchTerm = useDeferredValue(searchTerm);
 
   // Fast-Track Búsqueda Directa por Código (ej: "425-37-LP26")
   useEffect(() => {
-    if (!debouncedSearchTerm) return;
-    const cleanTerm = debouncedSearchTerm.trim();
+    if (!deferredSearchTerm) return;
+    const cleanTerm = deferredSearchTerm.trim();
 
     // Patrón de código de Mercado Público
     const isCodePattern = /^[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/i.test(cleanTerm) ||
@@ -77,7 +77,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
         }
       }).catch((err) => console.warn('Fast-track search error:', err));
     }
-  }, [debouncedSearchTerm, onFastTrackSearchResult]);
+  }, [deferredSearchTerm, onFastTrackSearchResult]);
 
   const [selectedTipo, setSelectedTipo] = useState<string>('TODOS');
   const [selectedStatus, setSelectedStatus] = useState<'ACTIVAS' | 'VENCIDAS' | 'TODAS'>('ACTIVAS');
@@ -104,10 +104,10 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
     return safeLicitaciones.filter((item) => {
       if (!item) return false;
 
-      const hasSearchQuery = Boolean(debouncedSearchTerm && debouncedSearchTerm.trim());
+      const hasSearchQuery = Boolean(deferredSearchTerm && deferredSearchTerm.trim());
 
       // 1. Case-insensitive search on id, nombre, organismo using toLowerCase()
-      if (hasSearchQuery && !matchesSearchTerm(item, debouncedSearchTerm)) {
+      if (hasSearchQuery && !matchesSearchTerm(item, deferredSearchTerm)) {
         return false;
       }
 
@@ -142,7 +142,7 @@ export const LicitacionesRadarView: React.FC<LicitacionesRadarViewProps> = ({
 
       return true;
     });
-  }, [safeLicitaciones, selectedStatus, debouncedSearchTerm, selectedTipo, selectedRange, selectedTags]);
+  }, [safeLicitaciones, selectedStatus, deferredSearchTerm, selectedTipo, selectedRange, selectedTags]);
 
   return (
     <div className="space-y-6 pb-12">

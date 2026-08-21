@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useDeferredValue } from 'react';
 import { Oportunidad } from '../types';
 import { getItemOfficialUrl, cleanOfficialId } from '../lib/dateUtils';
 import { Buscador } from './Buscador';
@@ -27,6 +27,7 @@ export const OportunidadesTabla: React.FC<Props> = ({
   onAddPostulacion,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearch = useDeferredValue(searchTerm);
 
   const rawList = oportunidades || items || [];
 
@@ -43,7 +44,7 @@ export const OportunidadesTabla: React.FC<Props> = ({
   }, [rawList]);
 
   const filteredData = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
+    const term = deferredSearch.toLowerCase().trim();
     if (!term) return dataList;
     return dataList.filter(
       (item) =>
@@ -51,7 +52,7 @@ export const OportunidadesTabla: React.FC<Props> = ({
         (item.nombre && item.nombre.toLowerCase().includes(term)) ||
         (item.organismo && item.organismo.toLowerCase().includes(term))
     );
-  }, [dataList, searchTerm]);
+  }, [dataList, deferredSearch]);
 
   const handleEvaluar = (item: Oportunidad) => {
     if (onEvaluarIA) {

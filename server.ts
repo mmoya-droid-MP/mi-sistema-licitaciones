@@ -1589,6 +1589,9 @@ app.post("/api/ai/analyze", async (req, res) => {
     const prompt = `Eres un evaluador experto de licitaciones públicas en Chile (Mercado Público).
 Tu objetivo es realizar un análisis de "Factibilidad y Compatibilidad Match" contrastando los requisitos de una licitación contra el perfil, certificaciones y CVs de una empresa seleccionada.
 
+LIMITACIÓN DE EXTENSIÓN (¡MUY IMPORTANTE!):
+Genera un resumen ejecutivo de máximo 200 palabras y exactamente 3 viñetas para riesgos/brechas. Sé ultra conciso para responder en menos de 2 segundos.
+
 DATOS DE LA LICITACIÓN/COTIZACIÓN:
 - Código ID: ${licitacion.codigo}
 - Título/Requerimiento: ${licitacion.nombre}
@@ -1608,10 +1611,11 @@ Debes responder SIEMPRE en formato JSON con el siguiente esquema:
   "brechas_criticas": ["Alertas sobre certificaciones faltantes, vencidas o falta de experiencia en el equipo"]
 }`;
 
-    const response = await withAIRetry(() => ai.models.generateContent({
+    const responseStream = await withAIRetry(() => ai.models.generateContentStream({
       model: "gemini-3.7-flash",
       contents: prompt,
       config: {
+        thinkingConfig: { thinkingBudget: 0 },
         systemInstruction: perfilEmpresaTexto,
         responseMimeType: "application/json",
         responseSchema: {
@@ -1628,38 +1632,15 @@ Debes responder SIEMPRE en formato JSON con el siguiente esquema:
       },
     }));
 
-    let text =
-      response?.text ||
-      (response as any)?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "{}";
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
 
-    // Limpieza estricta de markdown antes del JSON.parse
-    text = text.replace(/```json/i, '').replace(/```/g, '').trim();
-
-    let rawResult: any = {};
-    try {
-      rawResult = JSON.parse(text);
-    } catch {
-      rawResult = {};
+    for await (const chunk of responseStream) {
+      if (chunk.text) {
+        res.write(chunk.text);
+      }
     }
-
-    const fallback = createDynamicFallback(licitacion);
-
-    const matchScore = typeof rawResult.porcentaje_match === 'number' && !isNaN(rawResult.porcentaje_match)
-      ? Math.min(100, Math.max(0, Math.round(rawResult.porcentaje_match)))
-      : fallback.matchScore;
-
-    const finalResult = {
-      porcentaje_match: matchScore,
-      matchScore: matchScore,
-      resumen_ejecutivo: rawResult.resumen_ejecutivo || fallback.resumen_ejecutivo,
-      requisitos_cumplidos: Array.isArray(rawResult.requisitos_cumplidos) ? rawResult.requisitos_cumplidos : fallback.requisitos_cumplidos,
-      requisitos_faltantes: Array.isArray(rawResult.requisitos_faltantes) ? rawResult.requisitos_faltantes : fallback.requisitos_faltantes,
-      brechas_criticas: Array.isArray(rawResult.brechas_criticas) ? rawResult.brechas_criticas : fallback.brechas_criticas,
-      cartaGantt: ""
-    };
-
-    return res.json(finalResult);
+    return res.end();
   } catch (error: any) {
     const status = error?.status || error?.response?.status;
     if (status === 429 || error?.message?.includes('quota') || status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
