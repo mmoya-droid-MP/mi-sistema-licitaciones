@@ -330,7 +330,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </h3>
 
         <div className="divide-y divide-slate-100">
-          {licitaciones
+          {(licitaciones || [])
             .filter((item) => {
               const fc = extractFechaCierre(item) || item.fechaCierre;
               const d = new Date(fc);
