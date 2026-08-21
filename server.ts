@@ -42,7 +42,7 @@ export const withAIRetry = async <T>(fn: () => Promise<T>, maxRetries = 5, delay
           throw error;
         }
 
-        console.log(`[AI Retry] Transient API error (${status}). Retrying in ${delayMs}ms... (Attempt ${attempt} of ${maxRetries})`);
+        console.log(`[AI Retry] Transient API issue (status ${status}). Retrying in ${delayMs}ms... (Attempt ${attempt} of ${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         delayMs *= 2; // Exponential backoff
       } else {
@@ -1661,8 +1661,9 @@ Debes responder SIEMPRE en formato JSON con el siguiente esquema:
 
     return res.json(finalResult);
   } catch (error: any) {
-    if (error?.status === 429 || error?.message?.includes('quota') || error?.status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
-      console.log(`[Gemini Fallback] Usando evaluación por defecto. Estado de API: ${error?.status || 'Sobrecarga/Cuota'}`);
+    const status = error?.status || error?.response?.status;
+    if (status === 429 || error?.message?.includes('quota') || status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      console.log(`[Gemini Fallback] Usando evaluación por defecto. Estado de API: ${status || 'Sobrecarga/Cuota'}`);
     } else {
       console.error("Error en Gemini AI Analyze:", error);
     }
@@ -2106,8 +2107,9 @@ app.post('/api/evaluar-licitacion', async (req, res) => {
     res.json({ success: true, origen: 'gemini-live', data: dataEvaluacion });
 
   } catch (error: any) {
-    if (error?.status === 429 || error?.message?.includes('quota') || error?.status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
-      console.log(`[Gemini Fallback] Usando evaluación por defecto. Estado de API: ${error?.status || 'Sobrecarga/Cuota'}`);
+    const status = error?.status || error?.response?.status;
+    if (status === 429 || error?.message?.includes('quota') || status === 503 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      console.log(`[Gemini Fallback] Usando evaluación por defecto. Estado de API: ${status || 'Sobrecarga/Cuota'}`);
     } else {
       console.error("Error en la evaluación del prompt avanzado:", error);
     }
