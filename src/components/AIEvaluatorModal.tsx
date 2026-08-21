@@ -192,86 +192,71 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
             <div className="flex items-center justify-between bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-md">
               <div>
                 <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">
-                  Nivel de Afinidad Estimado (Match Score)
+                  Factibilidad y Compatibilidad (Match)
                 </span>
                 <p className="text-3xl font-extrabold text-white mt-1">
-                  {analysis?.matchScore || 0}%
+                  {analysis?.porcentaje_match || analysis?.matchScore || 0}%
                 </p>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Basado en capacidades técnicas, stack tecnológico y experiencia del equipo.
+                  Basado en capacidades técnicas, certificaciones y experiencia del equipo.
                 </p>
               </div>
-
               <div className="w-16 h-16 rounded-full border-4 border-indigo-400 flex items-center justify-center font-extrabold text-xl text-indigo-300 bg-indigo-950/50">
-                {analysis?.matchScore || 0}%
+                {analysis?.porcentaje_match || analysis?.matchScore || 0}%
               </div>
             </div>
 
             {/* Resumen Ejecutivo */}
             <div className="space-y-1 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
               <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-                Resumen Ejecutivo
+                Diagnóstico Ejecutivo
               </h4>
               <p className="text-xs text-slate-800 leading-relaxed font-medium">
-                {analysis?.resumenEjecutivo || 'No disponible'}
+                {analysis?.resumen_ejecutivo || (analysis as any)?.resumenEjecutivo || 'No disponible'}
               </p>
             </div>
 
-            {/* Requisitos Clave & Riesgos (2 grid) */}
+            {/* Requisitos Cumplidos & Faltantes (2 grid) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Requisitos */}
+              {/* Cumplidos */}
               <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/80 space-y-2">
                 <h4 className="text-xs font-bold text-emerald-900 uppercase tracking-wide flex items-center">
                   <CheckCircle2 className="w-4 h-4 mr-1.5 text-emerald-600" />
-                  Requisitos Clave TDR
+                  Requisitos Cumplidos
                 </h4>
                 <ul className="text-xs text-emerald-950 space-y-1 list-disc pl-4">
-                  {(analysis?.requisitosClave || (analysis as any)?.requisitos || [])?.map((req: string, i: number) => (
+                  {(analysis?.requisitos_cumplidos || [])?.map((req: string, i: number) => (
                     <li key={i}>{req}</li>
                   ))}
                 </ul>
               </div>
 
-              {/* Riesgos */}
+              {/* Faltantes */}
               <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200/80 space-y-2">
                 <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center">
                   <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-600" />
-                  Riesgos y Barreras Detectadas
+                  Requisitos Faltantes / Brechas
                 </h4>
                 <ul className="text-xs text-amber-950 space-y-1 list-disc pl-4">
-                  {(analysis?.riesgosDetectados || (analysis as any)?.riesgos || [])?.map((r: string, i: number) => (
+                  {(analysis?.requisitos_faltantes || [])?.map((r: string, i: number) => (
                     <li key={i}>{r}</li>
                   ))}
                 </ul>
               </div>
             </div>
 
-            {/* Recomendaciones Estratégicas */}
-            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-2">
-              <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center">
-                <Lightbulb className="w-4 h-4 mr-1.5 text-blue-600" />
-                Recomendaciones Ganadoras para la Propuesta
-              </h4>
-              <ul className="text-xs text-blue-950 space-y-1 list-disc pl-4">
-                {(analysis?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || [])?.map((rec: string, i: number) => (
-                  <li key={i}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Perfiles Requeridos */}
-            {analysis?.perfilesRequeridos && analysis?.perfilesRequeridos.length > 0 && (
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-slate-700 flex items-center">
-                  <UserCheck className="w-3.5 h-3.5 mr-1 text-slate-500" /> Perfiles y Capacidades Requeridas:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {analysis?.perfilesRequeridos?.map((p, i) => (
-                    <span key={i} className="bg-slate-100 text-slate-800 text-xs px-2.5 py-1 rounded font-medium">
-                      {p}
-                    </span>
+            {/* Brechas Críticas */}
+            {analysis?.brechas_criticas && analysis?.brechas_criticas.length > 0 && (
+              <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-200 space-y-2">
+                <h4 className="text-xs font-bold text-rose-900 uppercase tracking-wide flex items-center">
+                  <AlertTriangle className="w-4 h-4 mr-1.5 text-rose-600" />
+                  Brechas Críticas (Riesgo Alto)
+                </h4>
+                <ul className="text-xs text-rose-950 space-y-1 list-disc pl-4 font-medium">
+                  {analysis?.brechas_criticas?.map((rec: string, i: number) => (
+                    <li key={i}>{rec}</li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
 

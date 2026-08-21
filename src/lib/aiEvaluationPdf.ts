@@ -85,44 +85,38 @@ export function generateAIEvaluationPDF(item: LicitacionItem, analysis: GeminiAn
   // Match Score
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  if (analysis.matchScore >= 75) {
+  const match = analysis.porcentaje_match || analysis.matchScore || 0;
+  if (match >= 75) {
     doc.setTextColor(16, 185, 129); // emerald-500
-  } else if (analysis.matchScore >= 50) {
+  } else if (match >= 50) {
     doc.setTextColor(245, 158, 11); // amber-500
   } else {
     doc.setTextColor(239, 68, 68); // rose-500
   }
-  doc.text(`Match Score: ${analysis.matchScore}%`, 14, currentY);
+  doc.text(`Match Score: ${match}%`, 14, currentY);
   currentY += 6;
   
-  currentY = addTextLines(analysis.resumenEjecutivo, currentY);
+  currentY = addTextLines(analysis.resumen_ejecutivo || (analysis as any).resumenEjecutivo || 'No disponible', currentY);
   currentY += 6;
 
-  // Section 2: Requisitos Clave y Riesgos / Barreras
-  currentY = addSectionTitle('2. REQUISITOS TÉCNICOS Y RIESGOS DETECTADOS', currentY);
+  // Section 2: Requisitos y Brechas
+  currentY = addSectionTitle('2. REQUISITOS Y BRECHAS', currentY);
   
-  currentY = addTextLines('Requisitos Clave TDR:', currentY, 10, true);
+  currentY = addTextLines('Requisitos Cumplidos:', currentY, 10, true);
   currentY += 2;
-  currentY = addList(analysis.requisitosClave, currentY);
+  currentY = addList(analysis.requisitos_cumplidos || [], currentY);
   
-  currentY = addTextLines('Riesgos / Barreras Detectadas:', currentY, 10, true);
+  currentY = addTextLines('Requisitos Faltantes / Brechas:', currentY, 10, true);
   currentY += 2;
-  currentY = addList(analysis.riesgosDetectados, currentY);
+  currentY = addList(analysis.requisitos_faltantes || [], currentY);
 
-  // Section 3: Recomendaciones y Perfiles
+  // Section 3: Brechas Críticas
   if (currentY > 240) {
     doc.addPage();
     currentY = 20;
   }
-  currentY = addSectionTitle('3. RECOMENDACIONES GANADORAS Y PERFILES', currentY);
-  
-  currentY = addTextLines('Estrategia de Postulación:', currentY, 10, true);
-  currentY += 2;
-  currentY = addList(analysis.recomendacionesEstrategicas, currentY);
-  
-  currentY = addTextLines('Perfiles / Roles Requeridos:', currentY, 10, true);
-  currentY += 2;
-  currentY = addList(analysis.perfilesRequeridos, currentY);
+  currentY = addSectionTitle('3. BRECHAS CRÍTICAS (RIESGO ALTO)', currentY);
+  currentY = addList(analysis.brechas_criticas || [], currentY);
 
   if (analysis.cartaGantt && analysis.cartaGantt !== "No disponible." && analysis.cartaGantt !== "No disponible en vista histórica.") {
     if (currentY > 240) {

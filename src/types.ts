@@ -119,12 +119,12 @@ export interface AlertaNotificacion {
 }
 
 export interface GeminiAnalysisResult {
-  matchScore: number; // 0 to 100
-  resumenEjecutivo: string;
-  requisitosClave: string[];
-  riesgosDetectados: string[];
-  recomendacionesEstrategicas: string[];
-  perfilesRequeridos: string[];
+  porcentaje_match: number;
+  matchScore?: number; // legacy alias
+  resumen_ejecutivo: string;
+  requisitos_cumplidos: string[];
+  requisitos_faltantes: string[];
+  brechas_criticas: string[];
   cartaGantt?: string;
 }
 

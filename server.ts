@@ -1560,15 +1560,13 @@ function createDynamicFallback(licitacion: any) {
   ];
 
   return {
+    porcentaje_match: dynamicScore,
     matchScore: dynamicScore,
-    resumenEjecutivo: `Análisis de compatibilidad para el proceso ID ${cod} ("${cleanNombre}") de ${cliente}: Presenta una afinidad estimada del ${dynamicScore}%. El requerimiento encaja con los servicios tecnológicos de la empresa para la modalidad ${tipo}.`,
-    requisitos: reqList,
-    requisitosClave: reqList,
-    riesgos: riskList,
-    riesgosDetectados: riskList,
-    recomendaciones: recList,
-    recomendacionesEstrategicas: recList,
-    perfilesRequeridos: perfilesList
+    resumen_ejecutivo: `Análisis de compatibilidad para el proceso ID ${cod} ("${cleanNombre}") de ${cliente}: Presenta una afinidad estimada del ${dynamicScore}%. El requerimiento encaja con los servicios tecnológicos de la empresa para la modalidad ${tipo}.`,
+    requisitos_cumplidos: reqList,
+    requisitos_faltantes: riskList,
+    brechas_criticas: recList,
+    cartaGantt: ""
   };
 }
 
@@ -1588,8 +1586,8 @@ app.post("/api/ai/analyze", async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const prompt = `
-Analiza minuciosamente la siguiente oportunidad e indica la viabilidad y recomendación estratégica para postular:
+    const prompt = `Eres un evaluador experto de licitaciones públicas en Chile (Mercado Público).
+Tu objetivo es realizar un análisis de "Factibilidad y Compatibilidad Match" contrastando los requisitos de una licitación contra el perfil, certificaciones y CVs de una empresa seleccionada.
 
 DATOS DE LA LICITACIÓN/COTIZACIÓN:
 - Código ID: ${licitacion.codigo}
@@ -1597,26 +1595,18 @@ DATOS DE LA LICITACIÓN/COTIZACIÓN:
 - Organismo Comprador: ${licitacion.cliente}
 - Descripción: ${licitacion.descripcion || "No especificada"}
 - Tipo de Proceso: ${licitacion.tipo}
-- Monto Estimado: ${licitacion.montoEstimadoClp ? `$${licitacion.montoEstimadoClp.toLocaleString('es-CL')} CLP` : "No informado"}
-- Plazo de Cierre: ${licitacion.diasRestantes} días restantes
-- Etiquetas/Tecnologías: ${licitacion.tags ? licitacion.tags.join(', ') : 'S/I'}
 
 PERFIL DE LA EMPRESA CONSULTORA:
 ${perfilEmpresa || "Empresa de Tecnología, Consultoría TI, Desarrollo de Software, Integración Cloud (GCP/AWS/Azure), Google Maps/GIS, Ciberseguridad y Analítica de Datos."}
 
-INSTRUCCIONES CRÍTICAS:
-1. DIVERSIFICACIÓN DEL MATCH SCORE: Evalúa la afinidad tecnológica real entre el requerimiento y la empresa. Calcula un "matchScore" numérico entero verdaderamente variable entre 45 y 98 (porcentaje). NUNCA uses un número estático ni valores por defecto repetidos.
-2. CONTENIDO DINÁMICO ESPECÍFICO POR LICITACIÓN: En los puntos de "requisitos", "riesgos" y "recomendaciones", CITA elementos específicos del título ("${licitacion.nombre}"), la descripción o el organismo comprador ("${licitacion.cliente}") de la ficha activa, evitando respuestas genéricas repetidas.
-3. ESTRUCTURA OBLIGATORIA DE LA CARTA GANTT EN MARKDOWN: Basado en el plazo total exigido en la licitación, genera una tabla en Markdown con la siguiente estructura de fases y hitos para GEOSOLVE:
-| Fase / Hito del Proyecto | Entregables Claves | Período 1 | Período 2 | Período 3 | Período 4 |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| 1. Levantamiento y Arquitectura | Informe de Diagnóstico y Plan de Trabajo | ████ | | | |
-| 2. Configuración e Integración | Entorno GCP, APIs o Desarrollo Web listo | | ████ | | |
-| 3. Migración de Datos y Pruebas | Base de datos migrada y QA aprobado | | | ████ | |
-| 4. Capacitación y Soporte SLA | Manuales, Transferencia y Soporte activo | | | | ████ |
-Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitada por el comprador.
-4. ESTRUCTURA DE SALIDA JSON ESTRICTO: Genera la salida según el esquema solicitado.
-`;
+Debes responder SIEMPRE en formato JSON con el siguiente esquema:
+{
+  "porcentaje_match": 0-100,
+  "resumen_ejecutivo": "Explicación clara del diagnóstico",
+  "requisitos_cumplidos": ["Lista de exigencias que la empresa satisface"],
+  "requisitos_faltantes": ["Lista de exigencias no cubiertas o brechas"],
+  "brechas_criticas": ["Alertas sobre certificaciones faltantes, vencidas o falta de experiencia en el equipo"]
+}`;
 
     const response = await withAIRetry(() => ai.models.generateContent({
       model: "gemini-3.7-flash",
@@ -1627,52 +1617,13 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
         responseSchema: {
           type: "OBJECT",
           properties: {
-            matchScore: {
-              type: "NUMBER",
-              description: "Valor numérico entero variable entre 45 y 98 según el nivel de coincidencia real de palabras clave y tecnologías exigidas"
-            },
-            resumenEjecutivo: {
-              type: "STRING",
-              description: "Resumen estratégico corto de 2 a 3 frases citando explícitamente a " + licitacion.cliente + " y el requerimiento"
-            },
-            requisitos: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description: "Puntos de Requisitos Clave TDR citando detalles específicos de " + licitacion.nombre
-            },
-            requisitosClave: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            riesgos: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description: "Puntos de Riesgos y Barreras Detectadas específicos para el proceso " + licitacion.codigo
-            },
-            riesgosDetectados: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            recomendaciones: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description: "Recomendaciones ganadoras específicas para la propuesta"
-            },
-            recomendacionesEstrategicas: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            perfilesRequeridos: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description: "Perfiles profesionales solicitados"
-            },
-            cartaGantt: {
-              type: "STRING",
-              description: "Tabla Markdown de la Carta Gantt siguiendo estrictamente la estructura solicitada"
-            }
+            porcentaje_match: { type: "NUMBER" },
+            resumen_ejecutivo: { type: "STRING" },
+            requisitos_cumplidos: { type: "ARRAY", items: { type: "STRING" } },
+            requisitos_faltantes: { type: "ARRAY", items: { type: "STRING" } },
+            brechas_criticas: { type: "ARRAY", items: { type: "STRING" } }
           },
-          required: ["matchScore", "resumenEjecutivo", "requisitos", "riesgos", "recomendaciones", "cartaGantt"]
+          required: ["porcentaje_match", "resumen_ejecutivo", "requisitos_cumplidos", "requisitos_faltantes", "brechas_criticas"]
         }
       },
     }));
@@ -1694,43 +1645,18 @@ Nota: Adapta los períodos (Semanas o Meses) según la duración total solicitad
 
     const fallback = createDynamicFallback(licitacion);
 
-    const matchScore = typeof rawResult.matchScore === 'number' && !isNaN(rawResult.matchScore)
-      ? Math.min(98, Math.max(45, Math.round(rawResult.matchScore)))
+    const matchScore = typeof rawResult.porcentaje_match === 'number' && !isNaN(rawResult.porcentaje_match)
+      ? Math.min(100, Math.max(0, Math.round(rawResult.porcentaje_match)))
       : fallback.matchScore;
 
-    const reqList = (Array.isArray(rawResult.requisitos) && rawResult.requisitos.length > 0)
-      ? rawResult.requisitos
-      : (Array.isArray(rawResult.requisitosClave) && rawResult.requisitosClave.length > 0)
-      ? rawResult.requisitosClave
-      : fallback.requisitos;
-
-    const riskList = (Array.isArray(rawResult.riesgos) && rawResult.riesgos.length > 0)
-      ? rawResult.riesgos
-      : (Array.isArray(rawResult.riesgosDetectados) && rawResult.riesgosDetectados.length > 0)
-      ? rawResult.riesgosDetectados
-      : fallback.riesgos;
-
-    const recList = (Array.isArray(rawResult.recomendaciones) && rawResult.recomendaciones.length > 0)
-      ? rawResult.recomendaciones
-      : (Array.isArray(rawResult.recomendacionesEstrategicas) && rawResult.recomendacionesEstrategicas.length > 0)
-      ? rawResult.recomendacionesEstrategicas
-      : fallback.recomendaciones;
-
-    const perfilesList = Array.isArray(rawResult.perfilesRequeridos) && rawResult.perfilesRequeridos.length > 0
-      ? rawResult.perfilesRequeridos
-      : fallback.perfilesRequeridos;
-
     const finalResult = {
-      matchScore,
-      resumenEjecutivo: rawResult.resumenEjecutivo || fallback.resumenEjecutivo,
-      requisitos: reqList,
-      requisitosClave: reqList,
-      riesgos: riskList,
-      riesgosDetectados: riskList,
-      recomendaciones: recList,
-      recomendacionesEstrategicas: recList,
-      perfilesRequeridos: perfilesList,
-      cartaGantt: rawResult.cartaGantt || ""
+      porcentaje_match: matchScore,
+      matchScore: matchScore,
+      resumen_ejecutivo: rawResult.resumen_ejecutivo || fallback.resumen_ejecutivo,
+      requisitos_cumplidos: Array.isArray(rawResult.requisitos_cumplidos) ? rawResult.requisitos_cumplidos : fallback.requisitos_cumplidos,
+      requisitos_faltantes: Array.isArray(rawResult.requisitos_faltantes) ? rawResult.requisitos_faltantes : fallback.requisitos_faltantes,
+      brechas_criticas: Array.isArray(rawResult.brechas_criticas) ? rawResult.brechas_criticas : fallback.brechas_criticas,
+      cartaGantt: ""
     };
 
     return res.json(finalResult);
