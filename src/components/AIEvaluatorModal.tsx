@@ -154,12 +154,12 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
         codigo: item.codigo,
         licitacion: item,
         aiAnalysis: {
-          requisitos: analysis?.requisitosClave || (analysis as any)?.requisitos || [],
-          riesgos: analysis?.riesgosDetectados || (analysis as any)?.riesgos || [],
-          recomendaciones: analysis?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || [],
-          perfiles: analysis?.perfilesRequeridos || [],
+          requisitos: (analysis as any)?.requisitosClave || (analysis as any)?.requisitos || [],
+          riesgos: (analysis as any)?.riesgosDetectados || (analysis as any)?.riesgos || [],
+          recomendaciones: (analysis as any)?.recomendacionesEstrategicas || (analysis as any)?.recomendaciones || [],
+          perfiles: (analysis as any)?.perfilesRequeridos || [],
           matchScore: analysis?.matchScore,
-          resumenEjecutivo: analysis?.resumenEjecutivo,
+          resumenEjecutivo: (analysis as any)?.resumenEjecutivo,
           cartaGantt: analysis?.cartaGantt
         }
       };

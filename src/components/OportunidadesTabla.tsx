@@ -15,6 +15,122 @@ interface Props {
   onAddPostulacion?: (item: Oportunidad) => void;
 }
 
+const MemoizedList = React.memo(({ filteredData, searchTerm, handleEvaluar, handleAlerta, onAddPostulacion }: any) => {
+  return (
+    <div style={{ fontSize: '13px' }}>
+      {(filteredData || []).length === 0 ? (
+        <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '14px', backgroundColor: '#0f172a' }}>
+          {searchTerm ? `No se encontraron resultados para "${searchTerm}"` : 'No se encontraron oportunidades registradas.'}
+        </div>
+      ) : (
+        (filteredData || []).map((item: any) => (
+          <div
+            key={item.id || Math.random()}
+            className="grid grid-cols-[140px_220px_220px_130px_auto] items-center gap-2"
+            style={{
+              padding: '10px 12px',
+              borderBottom: '1px solid #1e293b',
+              backgroundColor: '#0f172a',
+            }}
+          >
+            {/* 1. ID */}
+            <div style={{ fontFamily: 'monospace', color: '#cbd5e1', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {cleanOfficialId(item.id)}
+            </div>
+
+            {/* 2. NOMBRE */}
+            <div style={{ color: '#f1f5f9', paddingRight: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.nombre}>
+              {item.nombre}
+            </div>
+
+            {/* 3. ORGANISMO */}
+            <div className="max-w-[220px] truncate pr-4 text-slate-300" title={item.organismo}>
+              {item.organismo}
+            </div>
+
+            {/* 4. TIPO DE COMPRA */}
+            <div className="w-[120px] text-left">
+              <span className="inline-block px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-100 text-emerald-700">
+                {item.tipo}
+              </span>
+            </div>
+
+            {/* 5. ACCIONES CON EL BOTÓN DE ALERTA OBLIGATORIO */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+              {/* Botón IA */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEvaluar(item);
+                }}
+                style={{
+                  padding: '5px 9px',
+                  backgroundColor: '#9333ea',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                }}
+              >
+                ✨ IA
+              </button>
+
+              {/* Botón Alerta */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAlerta(item);
+                }}
+                style={{
+                  padding: '5px 9px',
+                  backgroundColor: '#d97706',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                }}
+              >
+                🔔 Alerta
+              </button>
+
+              {/* Botón Postular / Ficha */}
+              <a
+                href={getItemOfficialUrl({ codigo: item.codigo || item.id, tipo: item.tipo, url: item.url })}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onAddPostulacion) {
+                    onAddPostulacion(item);
+                  }
+                }}
+                style={{
+                  padding: '5px 9px',
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+              >
+                Postular ↗
+              </a>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+});
+
 export const OportunidadesTabla: React.FC<Props> = ({
   oportunidades,
   items,
@@ -126,117 +242,13 @@ export const OportunidadesTabla: React.FC<Props> = ({
         </div>
 
         {/* FILAS DE DATOS */}
-        <div style={{ fontSize: '13px' }}>
-          {(filteredData || []).length === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '14px', backgroundColor: '#0f172a' }}>
-              {searchTerm ? `No se encontraron resultados para "${searchTerm}"` : 'No se encontraron oportunidades registradas.'}
-            </div>
-          ) : (
-            (filteredData || []).map((item) => (
-              <div
-                key={item.id || Math.random()}
-                className="grid grid-cols-[140px_220px_220px_130px_auto] items-center gap-2"
-                style={{
-                  padding: '10px 12px',
-                  borderBottom: '1px solid #1e293b',
-                  backgroundColor: '#0f172a',
-                }}
-              >
-                {/* 1. ID */}
-                <div style={{ fontFamily: 'monospace', color: '#cbd5e1', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {cleanOfficialId(item.id)}
-                </div>
-
-                {/* 2. NOMBRE */}
-                <div style={{ color: '#f1f5f9', paddingRight: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.nombre}>
-                  {item.nombre}
-                </div>
-
-                {/* 3. ORGANISMO */}
-                <div className="max-w-[220px] truncate pr-4 text-slate-300" title={item.organismo}>
-                  {item.organismo}
-                </div>
-
-                {/* 4. TIPO DE COMPRA */}
-                <div className="w-[120px] text-left">
-                  <span className="inline-block px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-100 text-emerald-700">
-                    {item.tipo}
-                  </span>
-                </div>
-
-                {/* 5. ACCIONES CON EL BOTÓN DE ALERTA OBLIGATORIO */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                  {/* Botón IA */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEvaluar(item);
-                    }}
-                    style={{
-                      padding: '5px 9px',
-                      backgroundColor: '#9333ea',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ✨ IA
-                  </button>
-
-                  {/* Botón Alerta */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAlerta(item);
-                    }}
-                    style={{
-                      padding: '5px 9px',
-                      backgroundColor: '#d97706',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🔔 Alerta
-                  </button>
-
-                  {/* Botón Postular / Ficha */}
-                  <a
-                    href={getItemOfficialUrl({ codigo: item.codigo || item.id, tipo: item.tipo, url: item.url })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onAddPostulacion) {
-                        onAddPostulacion(item);
-                      }
-                    }}
-                    style={{
-                      padding: '5px 9px',
-                      backgroundColor: '#2563eb',
-                      color: '#ffffff',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      textDecoration: 'none',
-                      display: 'inline-block',
-                    }}
-                  >
-                    Postular ↗
-                  </a>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <MemoizedList
+          filteredData={filteredData}
+          searchTerm={searchTerm}
+          handleEvaluar={handleEvaluar}
+          handleAlerta={handleAlerta}
+          onAddPostulacion={onAddPostulacion}
+        />
       </div>
     </div>
   );

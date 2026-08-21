@@ -61,8 +61,9 @@ export const HistorialEvaluacionesView: React.FC = () => {
       monto: 0,
       url: `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${ev.codigo_proceso}`
     } as unknown as LicitacionItem;
+    const analysis = {
 
-    const analysis: GeminiAnalysisResult = {
+     
       matchScore: ev.match_score,
       resumenEjecutivo: ev.resumen_ejecutivo,
       requisitosClave: ev.requisitos_clave || [],
@@ -72,7 +73,7 @@ export const HistorialEvaluacionesView: React.FC = () => {
       cartaGantt: "No disponible en vista histórica."
     };
 
-    setSelectedEvaluacion({ item: dummyItem, analysis });
+    setSelectedEvaluacion({ item: dummyItem, analysis: analysis as unknown as GeminiAnalysisResult });
   };
 
   const getScoreColor = (score: number) => {
